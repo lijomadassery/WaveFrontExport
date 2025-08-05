@@ -37,7 +37,7 @@ UserId: admin
 Password: Password1234
 
 UserId: s_admin
-Grafana Token: glsa_0k2Ck0Oc7AJ6Ik9us6TwvPQdVE9col1S_e5f59dd2
+Grafana Token: glsa_REDACTED_e5f59dd2
 
 UserId: kbaroni
 Password: Bologna8642
