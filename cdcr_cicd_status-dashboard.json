@@ -1,0 +1,955 @@
+{
+  "status": {
+    "result": "OK",
+    "message": "",
+    "code": 200
+  },
+  "response": {
+    "modifyAclAccess": true,
+    "numCharts": 12,
+    "numFavorites": 4,
+    "favorite": true,
+    "systemOwned": false,
+    "tags": {
+      "customerTags": []
+    },
+    "dashboardAttributes": null,
+    "parameterDetails": {},
+    "customer": "california-department-of-corrections-and-rehabilitation",
+    "eventFilterType": "NONE",
+    "sections": [
+      {
+        "rows": [
+          {
+            "charts": [
+              {
+                "summarization": "MEAN",
+                "noDefaultEvents": false,
+                "filterOutNonAnomalies": false,
+                "anomalyType": "both",
+                "anomalySeverity": "medium",
+                "displayConfidenceBounds": false,
+                "anomalyDetectionOn": false,
+                "interpolatePoints": false,
+                "anomalySampleSize": "8",
+                "chartSettings": {
+                  "fixedLegendUseRawStats": false,
+                  "fixedLegendEnabled": false,
+                  "fixedLegendPosition": "RIGHT",
+                  "fixedLegendDisplayStats": [
+                    "CURRENT"
+                  ],
+                  "windowing": "full",
+                  "numTags": 4,
+                  "fixedLegendShowSourceName": true,
+                  "lineType": "linear",
+                  "y0ScaleSIBy1024": false,
+                  "fixedLegendFilterSort": "TOP",
+                  "tagMode": "all",
+                  "fixedLegendShowMetricName": false,
+                  "y0UnitAutoscaling": true,
+                  "autoColumnTags": false,
+                  "y1Units": "",
+                  "y1UnitAutoscaling": false,
+                  "customTags": [],
+                  "y1ScaleSIBy1024": false,
+                  "fixedLegendFilterField": "CURRENT",
+                  "fixedLegendFilterLimit": 5,
+                  "type": "scatterplot"
+                },
+                "includeObsoleteMetrics": false,
+                "sources": [
+                  {
+                    "querybuilderEnabled": true,
+                    "sourceDescription": "",
+                    "querybuilderSerialization": "{\"_v\":1,\"metricType\":\"m\",\"filters\":[[],\"and\"],\"functions\":[],\"metric\":\"ts(cdcr.cicd.build)\"}",
+                    "query": "ts(cdcr.cicd.build)",
+                    "disabled": false,
+                    "secondaryAxis": false,
+                    "queryType": "WQL",
+                    "name": "A"
+                  }
+                ],
+                "units": "ms",
+                "base": 0,
+                "name": "Build Events",
+                "chartAttributes": {
+                  "isFixedTimeWindow": false,
+                  "chartFixedTimeWindow": "td",
+                  "chartFixedTimeDuration": 86400,
+                  "lineFill": 1,
+                  "dashboardLayout": {
+                    "x": 0,
+                    "y": 0,
+                    "h": 12,
+                    "w": 7
+                  }
+                }
+              },
+              {
+                "summarization": "MEAN",
+                "noDefaultEvents": false,
+                "filterOutNonAnomalies": false,
+                "anomalyType": "both",
+                "anomalySeverity": "medium",
+                "displayConfidenceBounds": false,
+                "anomalyDetectionOn": false,
+                "interpolatePoints": false,
+                "anomalySampleSize": "8",
+                "chartSettings": {
+                  "fixedLegendUseRawStats": false,
+                  "fixedLegendEnabled": false,
+                  "sparklineDisplayHorizontalPosition": "MIDDLE",
+                  "fixedLegendPosition": "RIGHT",
+                  "fixedLegendDisplayStats": [
+                    "CURRENT"
+                  ],
+                  "windowing": "full",
+                  "numTags": 4,
+                  "fixedLegendShowSourceName": true,
+                  "lineType": "linear",
+                  "sparklineDisplayValueType": "VALUE",
+                  "y0ScaleSIBy1024": false,
+                  "sparklineDecimalPrecision": 0,
+                  "fixedLegendFilterSort": "TOP",
+                  "tagMode": "all",
+                  "fixedLegendShowMetricName": false,
+                  "sparklineSize": "NONE",
+                  "y0UnitAutoscaling": false,
+                  "autoColumnTags": false,
+                  "sparklineValueTextMapText": [
+                    "new highest"
+                  ],
+                  "y1Units": "",
+                  "y1UnitAutoscaling": false,
+                  "sparklineValueColorMapApplyTo": "TEXT",
+                  "customTags": [],
+                  "sparklineDisplayFontSize": "100",
+                  "y1ScaleSIBy1024": false,
+                  "fixedLegendFilterField": "CURRENT",
+                  "fixedLegendFilterLimit": 5,
+                  "type": "sparkline"
+                },
+                "includeObsoleteMetrics": false,
+                "sources": [
+                  {
+                    "querybuilderEnabled": false,
+                    "sourceDescription": "",
+                    "query": "mseriescount(1vw, ts(cdcr.cicd.build, result=\"success\")) + 1",
+                    "disabled": false,
+                    "secondaryAxis": false,
+                    "queryType": "WQL",
+                    "name": "A"
+                  }
+                ],
+                "units": "",
+                "base": 0,
+                "name": "Successful Builds",
+                "chartAttributes": {
+                  "lineFill": 1,
+                  "noDataMessage": "No  Successful Builds",
+                  "singleStat": {
+                    "sparklineDisplayLabel": "A",
+                    "sparklineDisplaySubLabel": "Successful Builds"
+                  },
+                  "dashboardLayout": {
+                    "x": 7,
+                    "y": 0,
+                    "h": 3,
+                    "w": 2
+                  },
+                  "y0ScaleDecimal": false
+                }
+              },
+              {
+                "summarization": "LAST",
+                "noDefaultEvents": false,
+                "filterOutNonAnomalies": false,
+                "anomalyType": "both",
+                "anomalySeverity": "medium",
+                "displayConfidenceBounds": false,
+                "anomalyDetectionOn": false,
+                "interpolatePoints": false,
+                "anomalySampleSize": "8",
+                "chartSettings": {
+                  "fixedLegendUseRawStats": false,
+                  "fixedLegendEnabled": false,
+                  "fixedLegendPosition": "RIGHT",
+                  "fixedLegendDisplayStats": [
+                    "CURRENT"
+                  ],
+                  "windowing": "full",
+                  "numTags": 4,
+                  "fixedLegendShowSourceName": true,
+                  "lineType": "linear",
+                  "y0ScaleSIBy1024": false,
+                  "fixedLegendFilterSort": "TOP",
+                  "showHosts": false,
+                  "showLabels": false,
+                  "tagMode": "all",
+                  "sortValuesDescending": true,
+                  "fixedLegendShowMetricName": false,
+                  "y0UnitAutoscaling": true,
+                  "autoColumnTags": false,
+                  "defaultSortColumn": "tags[\"timestamp\"]",
+                  "y1Units": "",
+                  "y1UnitAutoscaling": false,
+                  "customTags": [],
+                  "showValueColumn": false,
+                  "groupBySource": false,
+                  "showRawValues": false,
+                  "y1ScaleSIBy1024": false,
+                  "fixedLegendFilterField": "CURRENT",
+                  "fixedLegendFilterLimit": 5,
+                  "type": "table"
+                },
+                "includeObsoleteMetrics": false,
+                "sources": [
+                  {
+                    "querybuilderEnabled": true,
+                    "sourceDescription": "",
+                    "querybuilderSerialization": "{\"_v\":1,\"metricType\":\"m\",\"filters\":[[],\"and\"],\"functions\":[],\"metric\":\"ts(cdcr.cicd.build)\"}",
+                    "query": "ts(cdcr.cicd.build)",
+                    "disabled": false,
+                    "secondaryAxis": false,
+                    "queryType": "WQL",
+                    "name": "A"
+                  }
+                ],
+                "units": "ms",
+                "base": 0,
+                "name": "Latest Builds",
+                "chartAttributes": {
+                  "lineFill": 1,
+                  "dashboardLayout": {
+                    "x": 9,
+                    "y": 0,
+                    "h": 12,
+                    "w": 3
+                  }
+                }
+              }
+            ],
+            "heightFactor": 190
+          },
+          {
+            "charts": [
+              {
+                "noDefaultEvents": false,
+                "interpolatePoints": false,
+                "chartSettings": {
+                  "fixedLegendUseRawStats": false,
+                  "fixedLegendEnabled": false,
+                  "sparklineDisplayHorizontalPosition": "MIDDLE",
+                  "fixedLegendPosition": "RIGHT",
+                  "fixedLegendDisplayStats": [
+                    "CURRENT"
+                  ],
+                  "windowing": "full",
+                  "numTags": 4,
+                  "fixedLegendShowSourceName": true,
+                  "lineType": "linear",
+                  "sparklineDisplayValueType": "VALUE",
+                  "y0ScaleSIBy1024": false,
+                  "fixedLegendFilterSort": "TOP",
+                  "tagMode": "all",
+                  "fixedLegendShowMetricName": false,
+                  "sparklineSize": "BACKGROUND",
+                  "y0UnitAutoscaling": false,
+                  "autoColumnTags": false,
+                  "sparklineValueTextMapText": [
+                    "new highest"
+                  ],
+                  "y1Units": "",
+                  "y1UnitAutoscaling": false,
+                  "sparklineValueColorMapApplyTo": "TEXT",
+                  "customTags": [],
+                  "sparklineDisplayFontSize": "100",
+                  "y1ScaleSIBy1024": false,
+                  "fixedLegendFilterField": "CURRENT",
+                  "fixedLegendFilterLimit": 5,
+                  "type": "sparkline"
+                },
+                "includeObsoleteMetrics": false,
+                "sources": [
+                  {
+                    "querybuilderEnabled": false,
+                    "query": "mseriescount(1vw, ts(cdcr.cicd.build, result=\"failed\"))",
+                    "disabled": false,
+                    "secondaryAxis": false,
+                    "queryType": "WQL",
+                    "name": "A"
+                  }
+                ],
+                "units": "Units",
+                "base": 0,
+                "name": "New Chart",
+                "chartAttributes": {
+                  "lineFill": 1,
+                  "noDataMessage": "No Failed Builds",
+                  "singleStat": {
+                    "sparklineDisplayLabel": "A",
+                    "sparklineDisplaySubLabel": "Failed Builds"
+                  },
+                  "dashboardLayout": {
+                    "x": 7,
+                    "y": 3,
+                    "h": 3,
+                    "w": 2
+                  },
+                  "y0ScaleDecimal": false
+                }
+              }
+            ],
+            "heightFactor": 50
+          },
+          {
+            "charts": [
+              {
+                "summarization": "MEAN",
+                "noDefaultEvents": false,
+                "filterOutNonAnomalies": false,
+                "anomalyType": "both",
+                "anomalySeverity": "medium",
+                "displayConfidenceBounds": false,
+                "anomalyDetectionOn": false,
+                "interpolatePoints": false,
+                "anomalySampleSize": "8",
+                "chartSettings": {
+                  "fixedLegendUseRawStats": false,
+                  "fixedLegendEnabled": false,
+                  "sparklineDisplayHorizontalPosition": "MIDDLE",
+                  "fixedLegendPosition": "RIGHT",
+                  "fixedLegendDisplayStats": [
+                    "CURRENT"
+                  ],
+                  "windowing": "full",
+                  "numTags": 4,
+                  "fixedLegendShowSourceName": true,
+                  "lineType": "linear",
+                  "sparklineDisplayValueType": "VALUE",
+                  "y0ScaleSIBy1024": false,
+                  "sparklineDecimalPrecision": 0,
+                  "fixedLegendFilterSort": "TOP",
+                  "tagMode": "all",
+                  "fixedLegendShowMetricName": false,
+                  "sparklineSize": "NONE",
+                  "y0UnitAutoscaling": false,
+                  "autoColumnTags": false,
+                  "sparklineValueTextMapText": [
+                    "new highest"
+                  ],
+                  "y1Units": "",
+                  "y1UnitAutoscaling": false,
+                  "sparklineValueColorMapApplyTo": "TEXT",
+                  "customTags": [],
+                  "sparklineDisplayFontSize": "100",
+                  "y1ScaleSIBy1024": false,
+                  "fixedLegendFilterField": "CURRENT",
+                  "fixedLegendFilterLimit": 5,
+                  "type": "sparkline"
+                },
+                "includeObsoleteMetrics": false,
+                "sources": [
+                  {
+                    "querybuilderEnabled": false,
+                    "sourceDescription": "",
+                    "query": "mseriescount(1vw, ts(cdcr.cicd.build, result=\"timeout\"))",
+                    "disabled": false,
+                    "secondaryAxis": false,
+                    "queryType": "WQL",
+                    "name": "A"
+                  }
+                ],
+                "units": "",
+                "base": 0,
+                "name": "New Chart",
+                "chartAttributes": {
+                  "lineFill": 1,
+                  "noDataMessage": "No Timedout Builds",
+                  "singleStat": {
+                    "sparklineDisplayLabel": "A",
+                    "sparklineDisplaySubLabel": "Timedout Builds"
+                  },
+                  "dashboardLayout": {
+                    "x": 7,
+                    "y": 6,
+                    "h": 3,
+                    "w": 2
+                  },
+                  "y0ScaleDecimal": false
+                }
+              }
+            ],
+            "heightFactor": 50
+          },
+          {
+            "charts": [
+              {
+                "summarization": "MEAN",
+                "noDefaultEvents": false,
+                "filterOutNonAnomalies": false,
+                "anomalyType": "both",
+                "anomalySeverity": "medium",
+                "displayConfidenceBounds": false,
+                "anomalyDetectionOn": false,
+                "interpolatePoints": false,
+                "anomalySampleSize": "8",
+                "chartSettings": {
+                  "fixedLegendUseRawStats": false,
+                  "fixedLegendEnabled": false,
+                  "sparklineDisplayHorizontalPosition": "MIDDLE",
+                  "fixedLegendPosition": "RIGHT",
+                  "fixedLegendDisplayStats": [
+                    "CURRENT"
+                  ],
+                  "windowing": "full",
+                  "numTags": 4,
+                  "fixedLegendShowSourceName": true,
+                  "lineType": "linear",
+                  "sparklineDisplayValueType": "VALUE",
+                  "y0ScaleSIBy1024": false,
+                  "sparklineDecimalPrecision": 1,
+                  "fixedLegendFilterSort": "TOP",
+                  "tagMode": "all",
+                  "fixedLegendShowMetricName": false,
+                  "sparklineSize": "NONE",
+                  "y0UnitAutoscaling": true,
+                  "autoColumnTags": false,
+                  "sparklineValueTextMapText": [
+                    "new highest"
+                  ],
+                  "y1Units": "",
+                  "y1UnitAutoscaling": false,
+                  "sparklineValueColorMapApplyTo": "TEXT",
+                  "customTags": [],
+                  "sparklineDisplayFontSize": "100",
+                  "y1ScaleSIBy1024": false,
+                  "fixedLegendFilterField": "CURRENT",
+                  "fixedLegendFilterLimit": 5,
+                  "type": "sparkline"
+                },
+                "includeObsoleteMetrics": false,
+                "sources": [
+                  {
+                    "querybuilderEnabled": false,
+                    "sourceDescription": "",
+                    "query": "align(1vw,avg(ts(cdcr.cicd.build)))",
+                    "disabled": false,
+                    "secondaryAxis": false,
+                    "queryType": "WQL",
+                    "name": "A"
+                  }
+                ],
+                "units": "ms",
+                "base": 0,
+                "name": "New Chart",
+                "chartAttributes": {
+                  "lineFill": 1,
+                  "showLearnMore": true,
+                  "singleStat": {
+                    "commaDelimited": true,
+                    "sparklineDisplayLabel": "A",
+                    "sparklineDisplaySubLabel": "Average Build Time"
+                  },
+                  "dashboardLayout": {
+                    "h": 3,
+                    "w": 2,
+                    "x": 7,
+                    "y": 9
+                  },
+                  "y0ScaleDecimal": false
+                }
+              }
+            ],
+            "heightFactor": 50
+          }
+        ],
+        "sectionFilter": null,
+        "id": "untitled-dashboard-section-1",
+        "name": "Build Metrics"
+      },
+      {
+        "rows": [
+          {
+            "charts": [
+              {
+                "summarization": "MEAN",
+                "noDefaultEvents": false,
+                "filterOutNonAnomalies": false,
+                "anomalyType": "both",
+                "anomalySeverity": "medium",
+                "displayConfidenceBounds": false,
+                "anomalyDetectionOn": false,
+                "interpolatePoints": false,
+                "anomalySampleSize": "8",
+                "chartSettings": {
+                  "fixedLegendUseRawStats": false,
+                  "fixedLegendEnabled": false,
+                  "fixedLegendPosition": "RIGHT",
+                  "fixedLegendDisplayStats": [
+                    "CURRENT"
+                  ],
+                  "windowing": "full",
+                  "numTags": 4,
+                  "fixedLegendShowSourceName": true,
+                  "lineType": "linear",
+                  "y0ScaleSIBy1024": false,
+                  "fixedLegendFilterSort": "TOP",
+                  "tagMode": "all",
+                  "fixedLegendShowMetricName": false,
+                  "y0UnitAutoscaling": true,
+                  "autoColumnTags": false,
+                  "y1Units": "",
+                  "y1UnitAutoscaling": false,
+                  "customTags": [],
+                  "y1ScaleSIBy1024": false,
+                  "fixedLegendFilterField": "CURRENT",
+                  "fixedLegendFilterLimit": 5,
+                  "type": "scatterplot"
+                },
+                "includeObsoleteMetrics": false,
+                "sources": [
+                  {
+                    "querybuilderEnabled": true,
+                    "sourceDescription": "",
+                    "querybuilderSerialization": "{\"_v\":1,\"metricType\":\"m\",\"filters\":[[],\"and\"],\"functions\":[],\"metric\":\"ts(cdcr.cicd.release)\"}",
+                    "query": "ts(cdcr.cicd.release)",
+                    "disabled": false,
+                    "secondaryAxis": false,
+                    "queryType": "WQL",
+                    "name": "A"
+                  }
+                ],
+                "units": "ms",
+                "base": 0,
+                "name": "Release Events",
+                "chartAttributes": {
+                  "isFixedTimeWindow": false,
+                  "chartFixedTimeWindow": "td",
+                  "chartFixedTimeDuration": 86400,
+                  "lineFill": 1,
+                  "dashboardLayout": {
+                    "x": 0,
+                    "y": 0,
+                    "h": 12,
+                    "w": 7
+                  }
+                }
+              },
+              {
+                "summarization": "MEAN",
+                "noDefaultEvents": false,
+                "filterOutNonAnomalies": false,
+                "anomalyType": "both",
+                "anomalySeverity": "medium",
+                "displayConfidenceBounds": false,
+                "anomalyDetectionOn": false,
+                "interpolatePoints": false,
+                "anomalySampleSize": "8",
+                "chartSettings": {
+                  "fixedLegendUseRawStats": false,
+                  "fixedLegendEnabled": false,
+                  "sparklineDisplayHorizontalPosition": "MIDDLE",
+                  "fixedLegendPosition": "RIGHT",
+                  "fixedLegendDisplayStats": [
+                    "CURRENT"
+                  ],
+                  "windowing": "full",
+                  "numTags": 4,
+                  "fixedLegendShowSourceName": true,
+                  "lineType": "linear",
+                  "sparklineDisplayValueType": "VALUE",
+                  "y0ScaleSIBy1024": false,
+                  "sparklineDecimalPrecision": 0,
+                  "fixedLegendFilterSort": "TOP",
+                  "tagMode": "all",
+                  "fixedLegendShowMetricName": false,
+                  "sparklineSize": "NONE",
+                  "y0UnitAutoscaling": false,
+                  "autoColumnTags": false,
+                  "sparklineValueTextMapText": [
+                    "new highest"
+                  ],
+                  "y1Units": "",
+                  "y1UnitAutoscaling": false,
+                  "sparklineValueColorMapValuesV2": [],
+                  "sparklineValueColorMapApplyTo": "BACKGROUND",
+                  "customTags": [],
+                  "sparklineDisplayFontSize": "100",
+                  "sparklineValueColorMapColors": [],
+                  "y1ScaleSIBy1024": false,
+                  "fixedLegendFilterField": "CURRENT",
+                  "fixedLegendFilterLimit": 5,
+                  "type": "sparkline"
+                },
+                "includeObsoleteMetrics": false,
+                "sources": [
+                  {
+                    "querybuilderEnabled": false,
+                    "sourceDescription": "",
+                    "query": "mseriescount(1vw, ts(cdcr.cicd.release, result=\"success\")) + 1",
+                    "disabled": false,
+                    "secondaryAxis": false,
+                    "queryType": "WQL",
+                    "name": "A"
+                  }
+                ],
+                "units": "",
+                "base": 0,
+                "name": "New Chart",
+                "chartAttributes": {
+                  "lineFill": 1,
+                  "noDataMessage": "No Successful Releases",
+                  "singleStat": {
+                    "sparklineDisplayLabel": "A",
+                    "sparklineDisplaySubLabel": "Successful Releases"
+                  },
+                  "dashboardLayout": {
+                    "x": 7,
+                    "y": 0,
+                    "h": 3,
+                    "w": 2
+                  },
+                  "y0ScaleDecimal": false
+                }
+              },
+              {
+                "summarization": "MEAN",
+                "noDefaultEvents": false,
+                "filterOutNonAnomalies": false,
+                "anomalyType": "both",
+                "anomalySeverity": "medium",
+                "displayConfidenceBounds": false,
+                "anomalyDetectionOn": false,
+                "interpolatePoints": false,
+                "anomalySampleSize": "8",
+                "chartSettings": {
+                  "fixedLegendUseRawStats": false,
+                  "fixedLegendEnabled": false,
+                  "fixedLegendPosition": "RIGHT",
+                  "fixedLegendDisplayStats": [
+                    "CURRENT"
+                  ],
+                  "windowing": "full",
+                  "numTags": 4,
+                  "fixedLegendShowSourceName": true,
+                  "lineType": "linear",
+                  "y0ScaleSIBy1024": false,
+                  "fixedLegendFilterSort": "TOP",
+                  "showHosts": false,
+                  "showLabels": false,
+                  "tagMode": "all",
+                  "sortValuesDescending": true,
+                  "fixedLegendShowMetricName": false,
+                  "y0UnitAutoscaling": false,
+                  "autoColumnTags": false,
+                  "defaultSortColumn": "tags[\"timestamp\"]",
+                  "y1Units": "",
+                  "y1UnitAutoscaling": false,
+                  "customTags": [],
+                  "showValueColumn": false,
+                  "groupBySource": false,
+                  "showRawValues": false,
+                  "y1ScaleSIBy1024": false,
+                  "fixedLegendFilterField": "CURRENT",
+                  "fixedLegendFilterLimit": 5,
+                  "type": "table"
+                },
+                "includeObsoleteMetrics": false,
+                "sources": [
+                  {
+                    "querybuilderEnabled": true,
+                    "sourceDescription": "",
+                    "querybuilderSerialization": "{\"_v\":1,\"metricType\":\"m\",\"filters\":[[],\"and\"],\"functions\":[],\"metric\":\"ts(cdcr.cicd.release)\"}",
+                    "query": "ts(cdcr.cicd.release)",
+                    "disabled": false,
+                    "secondaryAxis": false,
+                    "queryType": "WQL",
+                    "name": "A"
+                  }
+                ],
+                "units": "Units",
+                "base": 0,
+                "name": "Latest Releases",
+                "chartAttributes": {
+                  "lineFill": 1,
+                  "dashboardLayout": {
+                    "x": 9,
+                    "y": 0,
+                    "h": 12,
+                    "w": 3
+                  }
+                }
+              }
+            ],
+            "heightFactor": 190
+          },
+          {
+            "charts": [
+              {
+                "noDefaultEvents": false,
+                "interpolatePoints": false,
+                "chartSettings": {
+                  "fixedLegendUseRawStats": false,
+                  "fixedLegendEnabled": false,
+                  "sparklineDisplayHorizontalPosition": "MIDDLE",
+                  "fixedLegendPosition": "RIGHT",
+                  "fixedLegendDisplayStats": [
+                    "CURRENT"
+                  ],
+                  "windowing": "full",
+                  "numTags": 4,
+                  "fixedLegendShowSourceName": true,
+                  "lineType": "linear",
+                  "sparklineDisplayValueType": "VALUE",
+                  "y0ScaleSIBy1024": false,
+                  "sparklineDecimalPrecision": 0,
+                  "fixedLegendFilterSort": "TOP",
+                  "tagMode": "all",
+                  "fixedLegendShowMetricName": false,
+                  "sparklineSize": "BACKGROUND",
+                  "y0UnitAutoscaling": false,
+                  "autoColumnTags": false,
+                  "sparklineValueTextMapText": [
+                    "new highest"
+                  ],
+                  "y1Units": "",
+                  "y1UnitAutoscaling": false,
+                  "sparklineValueColorMapApplyTo": "TEXT",
+                  "customTags": [],
+                  "sparklineDisplayFontSize": "100",
+                  "y1ScaleSIBy1024": false,
+                  "fixedLegendFilterField": "CURRENT",
+                  "fixedLegendFilterLimit": 5,
+                  "sparklineFillColor": "rgba(255,77,46,1)",
+                  "type": "sparkline"
+                },
+                "includeObsoleteMetrics": false,
+                "sources": [
+                  {
+                    "querybuilderEnabled": false,
+                    "query": "mseriescount(1vw, ts(cdcr.cicd.release, result=\"failed\"))",
+                    "disabled": false,
+                    "secondaryAxis": false,
+                    "queryType": "WQL",
+                    "name": "A"
+                  }
+                ],
+                "units": "Units",
+                "base": 0,
+                "name": "New Chart",
+                "chartAttributes": {
+                  "lineFill": 1,
+                  "noDataMessage": "No Failed Releases",
+                  "singleStat": {
+                    "sparklineDisplayLabel": "A",
+                    "sparklineDisplaySubLabel": "Faled Releases"
+                  },
+                  "dashboardLayout": {
+                    "x": 7,
+                    "y": 3,
+                    "h": 3,
+                    "w": 2
+                  },
+                  "y0ScaleDecimal": false
+                }
+              }
+            ],
+            "heightFactor": 50
+          },
+          {
+            "charts": [
+              {
+                "summarization": "MEAN",
+                "noDefaultEvents": false,
+                "filterOutNonAnomalies": false,
+                "anomalyType": "both",
+                "anomalySeverity": "medium",
+                "displayConfidenceBounds": false,
+                "anomalyDetectionOn": false,
+                "interpolatePoints": false,
+                "anomalySampleSize": "8",
+                "chartSettings": {
+                  "fixedLegendUseRawStats": false,
+                  "fixedLegendEnabled": false,
+                  "sparklineDisplayHorizontalPosition": "MIDDLE",
+                  "fixedLegendPosition": "RIGHT",
+                  "fixedLegendDisplayStats": [
+                    "CURRENT"
+                  ],
+                  "windowing": "full",
+                  "numTags": 4,
+                  "fixedLegendShowSourceName": true,
+                  "lineType": "linear",
+                  "sparklineDisplayValueType": "VALUE",
+                  "y0ScaleSIBy1024": false,
+                  "sparklineDecimalPrecision": 0,
+                  "fixedLegendFilterSort": "TOP",
+                  "tagMode": "all",
+                  "fixedLegendShowMetricName": false,
+                  "sparklineSize": "NONE",
+                  "y0UnitAutoscaling": false,
+                  "autoColumnTags": false,
+                  "sparklineValueTextMapText": [
+                    "new highest"
+                  ],
+                  "y1Units": "",
+                  "y1UnitAutoscaling": false,
+                  "sparklineValueColorMapApplyTo": "TEXT",
+                  "customTags": [],
+                  "sparklineDisplayFontSize": "100",
+                  "y1ScaleSIBy1024": false,
+                  "fixedLegendFilterField": "CURRENT",
+                  "fixedLegendFilterLimit": 5,
+                  "type": "sparkline"
+                },
+                "includeObsoleteMetrics": false,
+                "sources": [
+                  {
+                    "querybuilderEnabled": false,
+                    "sourceDescription": "",
+                    "query": "mseriescount(1vw, ts(cdcr.cicd.release, result=timeout))",
+                    "disabled": false,
+                    "secondaryAxis": false,
+                    "queryType": "WQL",
+                    "name": "A"
+                  }
+                ],
+                "units": "",
+                "base": 0,
+                "name": "New Chart",
+                "chartAttributes": {
+                  "lineFill": 0,
+                  "noDataMessage": "No Timedout Releases",
+                  "singleStat": {
+                    "sparklineDisplayLabel": "A",
+                    "sparklineDisplaySubLabel": "Timedout Releases"
+                  },
+                  "dashboardLayout": {
+                    "x": 7,
+                    "y": 6,
+                    "h": 3,
+                    "w": 2
+                  },
+                  "y0ScaleDecimal": false
+                }
+              }
+            ],
+            "heightFactor": 50
+          },
+          {
+            "charts": [
+              {
+                "summarization": "MEAN",
+                "noDefaultEvents": false,
+                "filterOutNonAnomalies": false,
+                "anomalyType": "both",
+                "anomalySeverity": "medium",
+                "displayConfidenceBounds": false,
+                "anomalyDetectionOn": false,
+                "interpolatePoints": false,
+                "anomalySampleSize": "8",
+                "chartSettings": {
+                  "fixedLegendUseRawStats": false,
+                  "fixedLegendEnabled": false,
+                  "sparklineDisplayHorizontalPosition": "MIDDLE",
+                  "fixedLegendPosition": "RIGHT",
+                  "fixedLegendDisplayStats": [
+                    "CURRENT"
+                  ],
+                  "windowing": "full",
+                  "numTags": 4,
+                  "fixedLegendShowSourceName": true,
+                  "lineType": "linear",
+                  "sparklineDisplayValueType": "VALUE",
+                  "y0ScaleSIBy1024": false,
+                  "sparklineDecimalPrecision": 1,
+                  "fixedLegendFilterSort": "TOP",
+                  "tagMode": "all",
+                  "fixedLegendShowMetricName": false,
+                  "sparklineSize": "NONE",
+                  "y0UnitAutoscaling": true,
+                  "autoColumnTags": false,
+                  "sparklineValueTextMapText": [
+                    "new highest"
+                  ],
+                  "y1Units": "",
+                  "y1UnitAutoscaling": false,
+                  "sparklineValueColorMapApplyTo": "TEXT",
+                  "customTags": [],
+                  "sparklineDisplayFontSize": "100",
+                  "y1ScaleSIBy1024": false,
+                  "fixedLegendFilterField": "CURRENT",
+                  "fixedLegendFilterLimit": 5,
+                  "type": "sparkline"
+                },
+                "includeObsoleteMetrics": false,
+                "sources": [
+                  {
+                    "querybuilderEnabled": false,
+                    "sourceDescription": "",
+                    "query": "align(1vw,avg(ts(cdcr.cicd.release)))",
+                    "disabled": false,
+                    "secondaryAxis": false,
+                    "queryType": "WQL",
+                    "name": "A"
+                  }
+                ],
+                "units": "ms",
+                "base": 0,
+                "name": "New Chart",
+                "chartAttributes": {
+                  "lineFill": 1,
+                  "showLearnMore": true,
+                  "singleStat": {
+                    "commaDelimited": true,
+                    "sparklineDisplayLabel": "A",
+                    "sparklineDisplaySubLabel": "Average Deploy Time"
+                  },
+                  "dashboardLayout": {
+                    "h": 3,
+                    "w": 2,
+                    "x": 7,
+                    "y": 9
+                  },
+                  "y0ScaleDecimal": false
+                }
+              }
+            ],
+            "heightFactor": 50
+          }
+        ],
+        "sectionFilter": null,
+        "id": "BZuFn",
+        "name": "Release Metrics"
+      }
+    ],
+    "viewsLastMonth": 5,
+    "defaultTimeWindow": "td",
+    "viewsLastDay": 5,
+    "viewsLastWeek": 5,
+    "displayDescription": false,
+    "creatorId": "Tom.Seufert@broadcom.com",
+    "acl": {
+      "canView": [],
+      "canModify": [
+        "12d44666-9f2e-4d1a-8235-52c35cb41e34"
+      ]
+    },
+    "disableRefreshInLiveMode": false,
+    "updaterId": "kevin.baroni@cdcr.ca.gov",
+    "url": "cdcr-cicd-status",
+    "displayQueryParameters": true,
+    "hideChartWarning": false,
+    "displaySectionTableOfContents": true,
+    "hidden": false,
+    "orphan": false,
+    "updatedEpochMillis": 1747359089585,
+    "createdEpochMillis": 1717795071483,
+    "deleted": false,
+    "id": "cdcr-cicd-status",
+    "parameters": {},
+    "name": "cdcr-cicd-status"
+  }
+}

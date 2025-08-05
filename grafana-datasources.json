@@ -1,0 +1,185 @@
+[
+    {
+        "id": 8,
+        "uid": "ce558295-5ee3-4c59-8b78-fbd416eb1353",
+        "orgId": 1,
+        "name": "Loki",
+        "type": "loki",
+        "typeName": "Loki",
+        "typeLogoUrl": "/public/app/plugins/datasource/loki/img/loki_icon.svg",
+        "access": "proxy",
+        "url": "http://loki-lightweight.monitoring.svc.cluster.local:3100",
+        "user": "",
+        "database": "",
+        "basicAuth": false,
+        "isDefault": false,
+        "jsonData": {
+            "tlsSkipVerify": true
+        },
+        "readOnly": false
+    },
+    {
+        "id": 2,
+        "uid": "ee891a1c-05c5-4c49-b782-1da4f43e5539",
+        "orgId": 1,
+        "name": "Prometheus-DEV",
+        "type": "prometheus",
+        "typeName": "Prometheus",
+        "typeLogoUrl": "/public/app/plugins/datasource/prometheus/img/prometheus_logo.svg",
+        "access": "proxy",
+        "url": "http://10.124.130.8:9090",
+        "user": "",
+        "database": "",
+        "basicAuth": false,
+        "isDefault": false,
+        "jsonData": {
+            "disableRecordingRules": false,
+            "httpMethod": "GET",
+            "incrementalQuerying": true,
+            "prometheusType": "Prometheus",
+            "tlsSkipVerify": true
+        },
+        "readOnly": false
+    },
+    {
+        "id": 10,
+        "uid": "d3b773fb-9d60-4f8c-884d-0734feb77810",
+        "orgId": 1,
+        "name": "Prometheus-SS-PROD",
+        "type": "prometheus",
+        "typeName": "Prometheus",
+        "typeLogoUrl": "/public/app/plugins/datasource/prometheus/img/prometheus_logo.svg",
+        "access": "proxy",
+        "url": "http://prometheus-stack-kube-prom-prometheus.monitoring.svc.cluster.local:9090",
+        "user": "",
+        "database": "",
+        "basicAuth": false,
+        "isDefault": false,
+        "jsonData": {
+            "disableRecordingRules": false,
+            "httpMethod": "GET",
+            "incrementalQuerying": true
+        },
+        "readOnly": false
+    },
+    {
+        "id": 11,
+        "uid": "ca95e858-56a9-4275-a236-98bb818d8d7d",
+        "orgId": 1,
+        "name": "Prometheus-STAGE",
+        "type": "prometheus",
+        "typeName": "Prometheus",
+        "typeLogoUrl": "/public/app/plugins/datasource/prometheus/img/prometheus_logo.svg",
+        "access": "proxy",
+        "url": "http://10.124.130.12:9090",
+        "user": "",
+        "database": "",
+        "basicAuth": false,
+        "isDefault": false,
+        "jsonData": {
+            "httpMethod": "GET",
+            "incrementalQuerying": true
+        },
+        "readOnly": false
+    },
+    {
+        "id": 3,
+        "uid": "ed6b22fe-ff69-4d6e-9be4-d14ddd4dca84",
+        "orgId": 1,
+        "name": "Prometheus-TEST",
+        "type": "prometheus",
+        "typeName": "Prometheus",
+        "typeLogoUrl": "/public/app/plugins/datasource/prometheus/img/prometheus_logo.svg",
+        "access": "proxy",
+        "url": "http://10.124.130.9:9090",
+        "user": "",
+        "database": "",
+        "basicAuth": false,
+        "isDefault": false,
+        "jsonData": {
+            "disableRecordingRules": false,
+            "httpMethod": "GET",
+            "incrementalQuerying": true,
+            "prometheusType": "Prometheus",
+            "tlsSkipVerify": true
+        },
+        "readOnly": false
+    },
+    {
+        "id": 4,
+        "uid": "tempo",
+        "orgId": 1,
+        "name": "Tempo",
+        "type": "tempo",
+        "typeName": "Tempo",
+        "typeLogoUrl": "/public/app/plugins/datasource/tempo/img/tempo_logo.svg",
+        "access": "proxy",
+        "url": "http://10.124.130.11:3200",
+        "user": "",
+        "database": "",
+        "basicAuth": false,
+        "isDefault": false,
+        "jsonData": {
+            "httpMethod": "GET",
+            "search": {
+                "hide": false
+            },
+            "timeout": "30s",
+            "tracesToLogsV2": {
+                "datasourceUid": "loki",
+                "spanEndTimeShift": "1h",
+                "spanStartTimeShift": "-1h"
+            }
+        },
+        "readOnly": true
+    },
+    {
+        "id": 13,
+        "uid": "c80bd620-2a32-44da-abaf-333adcdb8d34",
+        "orgId": 1,
+        "name": "Tempo-dev",
+        "type": "tempo",
+        "typeName": "Tempo",
+        "typeLogoUrl": "/public/app/plugins/datasource/tempo/img/tempo_logo.svg",
+        "access": "proxy",
+        "url": "http://10.124.130.17:3200",
+        "user": "",
+        "database": "",
+        "basicAuth": false,
+        "isDefault": false,
+        "jsonData": {
+            "tracesToLogsV2": {
+                "customQuery": false,
+                "datasourceUid": "ce558295-5ee3-4c59-8b78-fbd416eb1353",
+                "spanEndTimeShift": "1h",
+                "spanStartTimeShift": "-1h"
+            }
+        },
+        "readOnly": false
+    },
+    {
+        "id": 14,
+        "uid": "dff74ab0-7de8-4845-96d9-e2e7143c1a33",
+        "orgId": 1,
+        "name": "Tempo-stage",
+        "type": "tempo",
+        "typeName": "Tempo",
+        "typeLogoUrl": "/public/app/plugins/datasource/tempo/img/tempo_logo.svg",
+        "access": "proxy",
+        "url": "http://10.124.130.18:3200",
+        "user": "",
+        "database": "",
+        "basicAuth": false,
+        "isDefault": false,
+        "jsonData": {
+            "tracesToLogsV2": {
+                "customQuery": false,
+                "datasourceUid": "ce558295-5ee3-4c59-8b78-fbd416eb1353",
+                "filterByTraceID": false,
+                "spanEndTimeShift": "1h",
+                "spanStartTimeShift": "-1h"
+            }
+        },
+        "readOnly": false
+    }
+]
