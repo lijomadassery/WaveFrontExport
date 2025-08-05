@@ -77,11 +77,21 @@ pip install -r requirements.txt
 ### Basic Command Structure
 
 ```bash
+# Using Grafana API token
 python wavefront-grafana-migrator.py \
     --wavefront-url YOUR_WAVEFRONT_URL \
     --wavefront-token YOUR_WAVEFRONT_TOKEN \
     --grafana-url YOUR_GRAFANA_URL \
     --grafana-token YOUR_GRAFANA_TOKEN \
+    --datasource-type prometheus \
+    --datasource-uid YOUR_DATASOURCE_UID
+
+# OR using Grafana username/password
+python wavefront-grafana-migrator.py \
+    --wavefront-url YOUR_WAVEFRONT_URL \
+    --wavefront-token YOUR_WAVEFRONT_TOKEN \
+    --grafana-url YOUR_GRAFANA_URL \
+    --grafana-credentials admin your-password \
     --datasource-type prometheus \
     --datasource-uid YOUR_DATASOURCE_UID
 ```
@@ -91,7 +101,12 @@ python wavefront-grafana-migrator.py \
 - `--wavefront-url`: Wavefront API URL (required)
 - `--wavefront-token`: Wavefront API token (required)
 - `--grafana-url`: Grafana API URL (required)
-- `--grafana-token`: Grafana API token (required)
+
+**Grafana Authentication (choose one):**
+- `--grafana-token`: Grafana API token
+- `--grafana-credentials USERNAME PASSWORD`: Grafana username and password
+
+**Other Arguments:**
 - `--datasource-type`: Target datasource type: `prometheus`, `influxdb`, `elasticsearch`, `cloudwatch` (required)
 - `--datasource-uid`: Grafana datasource UID (required)
 - `--dashboards`: Specific dashboard IDs to migrate (optional)
@@ -125,6 +140,17 @@ python wavefront-grafana-migrator.py \
     --skip-alerts
 ```
 
+#### Migrate using username/password (local Grafana):
+```bash
+python wavefront-grafana-migrator.py \
+    --wavefront-url https://your-instance.wavefront.com \
+    --wavefront-token your-token \
+    --grafana-url http://localhost:3000 \
+    --grafana-credentials admin your-password \
+    --datasource-type prometheus \
+    --datasource-uid abc123def
+```
+
 #### Migrate to InfluxDB datasource:
 ```bash
 python wavefront-grafana-migrator.py \
@@ -143,10 +169,18 @@ python wavefront-grafana-migrator.py \
 2. Navigate to your user profile settings
 3. Generate an API token with appropriate permissions
 
-### Grafana API Token
+### Grafana Authentication
+
+**Option 1: API Token (Recommended)**
 1. Log in to your Grafana instance
 2. Go to Configuration → API Keys
 3. Create a new API key with Editor or Admin role
+4. Use with `--grafana-token` parameter
+
+**Option 2: Username/Password**
+- Use your Grafana admin username and password
+- Use with `--grafana-credentials username password` parameter
+- Ideal for local development or when API tokens aren't available
 
 ### Grafana Datasource UID
 1. In Grafana, go to Configuration → Data Sources

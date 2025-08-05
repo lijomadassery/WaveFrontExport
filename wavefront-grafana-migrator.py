@@ -32,9 +32,12 @@ class MigrationConfig:
     wavefront_url: str
     wavefront_token: str
     grafana_url: str
-    grafana_token: str
     target_datasource: DataSourceType
     datasource_uid: str  # Grafana datasource UID
+    # Grafana authentication - either token OR username/password
+    grafana_token: Optional[str] = None
+    grafana_username: Optional[str] = None
+    grafana_password: Optional[str] = None
 
 
 class WavefrontExtractor:
@@ -498,12 +501,24 @@ class GrafanaAlertBuilder:
 class GrafanaImporter:
     """Import dashboards and alerts to Grafana"""
     
-    def __init__(self, url: str, token: str):
+    def __init__(self, url: str, token: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None):
         self.url = url.rstrip('/')
-        self.headers = {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
-        }
+        self.auth = None
+        
+        if token:
+            # Token-based authentication
+            self.headers = {
+                'Authorization': f'Bearer {token}',
+                'Content-Type': 'application/json'
+            }
+        elif username and password:
+            # Basic authentication
+            self.headers = {
+                'Content-Type': 'application/json'
+            }
+            self.auth = (username, password)
+        else:
+            raise ValueError("Either token or username/password must be provided for Grafana authentication")
     
     def import_dashboard(self, dashboard_json: Dict) -> bool:
         """Import dashboard to Grafana"""
@@ -511,6 +526,7 @@ class GrafanaImporter:
             response = requests.post(
                 f"{self.url}/api/dashboards/db",
                 headers=self.headers,
+                auth=self.auth,
                 json=dashboard_json
             )
             response.raise_for_status()
@@ -529,6 +545,7 @@ class GrafanaImporter:
             response = requests.post(
                 f"{self.url}/api/v1/provisioning/alert-rules",
                 headers=self.headers,
+                auth=self.auth,
                 json=alert_json
             )
             response.raise_for_status()
@@ -555,7 +572,12 @@ class MigrationOrchestrator:
             config.target_datasource,
             config.datasource_uid
         )
-        self.importer = GrafanaImporter(config.grafana_url, config.grafana_token)
+        self.importer = GrafanaImporter(
+            config.grafana_url, 
+            token=config.grafana_token,
+            username=config.grafana_username,
+            password=config.grafana_password
+        )
     
     def migrate_dashboards(self, dashboard_ids: Optional[List[str]] = None):
         """Migrate dashboards from Wavefront to Grafana"""
@@ -654,7 +676,11 @@ def main():
     parser.add_argument('--wavefront-url', required=True, help='Wavefront API URL')
     parser.add_argument('--wavefront-token', required=True, help='Wavefront API token')
     parser.add_argument('--grafana-url', required=True, help='Grafana API URL')
-    parser.add_argument('--grafana-token', required=True, help='Grafana API token')
+    # Grafana authentication - either token OR username/password
+    auth_group = parser.add_mutually_exclusive_group(required=True)
+    auth_group.add_argument('--grafana-token', help='Grafana API token')
+    auth_group.add_argument('--grafana-credentials', nargs=2, metavar=('USERNAME', 'PASSWORD'), 
+                           help='Grafana username and password')
     parser.add_argument('--datasource-type', required=True, 
                        choices=['prometheus', 'influxdb', 'elasticsearch', 'cloudwatch'],
                        help='Target datasource type in Grafana')
@@ -666,14 +692,26 @@ def main():
     
     args = parser.parse_args()
     
+    # Parse Grafana authentication
+    grafana_token = None
+    grafana_username = None
+    grafana_password = None
+    
+    if args.grafana_token:
+        grafana_token = args.grafana_token
+    elif args.grafana_credentials:
+        grafana_username, grafana_password = args.grafana_credentials
+    
     # Create configuration
     config = MigrationConfig(
         wavefront_url=args.wavefront_url,
         wavefront_token=args.wavefront_token,
         grafana_url=args.grafana_url,
-        grafana_token=args.grafana_token,
         target_datasource=DataSourceType(args.datasource_type),
-        datasource_uid=args.datasource_uid
+        datasource_uid=args.datasource_uid,
+        grafana_token=grafana_token,
+        grafana_username=grafana_username,
+        grafana_password=grafana_password
     )
     
     # Run migration
