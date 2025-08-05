@@ -220,24 +220,63 @@ For complex queries, review the generated JSON files and adjust as needed before
 
 If you have Grafana dashboards but no data yet, you can generate synthetic test data using Prometheus Push Gateway.
 
-### Quick Setup
+### Setup Steps
 
-1. **Start Push Gateway**:
+#### 1. Start Push Gateway
 ```bash
 docker run -d -p 9091:9091 prom/pushgateway
 ```
 
-2. **Configure your existing Prometheus** to scrape Push Gateway in `prometheus.yml`:
+#### 2. Configure Prometheus (REQUIRED!)
+**Important**: Prometheus doesn't automatically know about Push Gateway - you must tell it where to find it.
+
+**Find your Prometheus configuration file:**
+```bash
+# Common locations:
+/etc/prometheus/prometheus.yml
+/opt/prometheus/prometheus.yml
+
+# Or check running service:
+sudo systemctl status prometheus
+
+# For Docker:
+docker inspect <prometheus-container> | grep -i config
+```
+
+**Edit `prometheus.yml` and add Push Gateway:**
 ```yaml
+global:
+  scrape_interval: 15s
+
 scrape_configs:
+  # Your existing jobs (keep these)...
+  
+  # ADD THIS NEW JOB:
   - job_name: 'pushgateway'
     static_configs:
       - targets: ['localhost:9091']
+    scrape_interval: 5s    # Optional: scrape more frequently  
+    honor_labels: true     # IMPORTANT: preserves pushed metric labels
 ```
 
-3. **Restart Prometheus** to pick up the new configuration
+#### 3. Restart Prometheus
+```bash
+# If running as service:
+sudo systemctl restart prometheus
 
-4. **Push sample metrics**:
+# If running in Docker:
+docker restart <prometheus-container-name>
+```
+
+#### 4. Verify Configuration
+1. **Check targets**: http://your-prometheus:9090/targets
+   - Should show `pushgateway (1/1 up)` 
+2. **Test query**: http://your-prometheus:9090/graph  
+   - Query: `up{job="pushgateway"}` should return `1`
+
+**⚠️ Without step 2-3, your test data won't appear in Grafana!**
+
+#### 5. Push Test Data
 ```bash
 # CI/CD Pipeline metrics
 echo "ci_build_duration_seconds 45.2" | curl --data-binary @- http://localhost:9091/metrics/job/ci_pipeline/instance/jenkins
@@ -331,6 +370,61 @@ echo "sales_revenue_total 45000" | curl --data-binary @- http://localhost:9091/m
 echo "user_signups_total 125" | curl --data-binary @- http://localhost:9091/metrics/job/business/instance/webapp
 echo "order_conversion_rate 0.034" | curl --data-binary @- http://localhost:9091/metrics/job/business/instance/ecommerce
 ```
+
+### Troubleshooting Push Gateway
+
+#### Problem: "No data in Grafana after pushing metrics"
+
+**Check this step by step:**
+
+1. **Is Push Gateway receiving data?**
+   ```bash
+   # Check Push Gateway UI
+   curl http://localhost:9091/metrics
+   # Should show your pushed metrics
+   ```
+
+2. **Is Prometheus scraping Push Gateway?**
+   ```bash
+   # Check Prometheus targets
+   curl http://your-prometheus:9090/api/v1/targets
+   # Look for pushgateway job with "health": "up"
+   ```
+
+3. **Is the `honor_labels: true` setting present?**
+   ```yaml
+   # In prometheus.yml - this is CRITICAL
+   - job_name: 'pushgateway'
+     honor_labels: true  # Without this, labels get overwritten!
+   ```
+
+4. **Did you restart Prometheus after config changes?**
+   ```bash
+   # Configuration changes require restart
+   sudo systemctl restart prometheus
+   ```
+
+#### Problem: "Push Gateway shows 'DOWN' in Prometheus targets"
+
+**Common causes:**
+- Wrong target URL in `prometheus.yml` (check `localhost` vs actual hostname)
+- Firewall blocking port 9091
+- Push Gateway container stopped
+
+**Check:**
+```bash
+# Test connectivity from Prometheus server
+curl http://localhost:9091/metrics
+
+# Check Push Gateway logs
+docker logs <pushgateway-container>
+```
+
+#### Problem: "Metrics appear but with wrong labels"
+
+**Cause**: Missing `honor_labels: true` in Prometheus config
+
+**Fix**: Add `honor_labels: true` to the pushgateway job and restart Prometheus
 
 ## Limitations
 

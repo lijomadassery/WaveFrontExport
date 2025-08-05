@@ -4,7 +4,9 @@
 # Perfect for testing Grafana dashboards with synthetic data
 #
 # Prerequisites: 
-#   docker run -d -p 9091:9091 prom/pushgateway
+#   1. docker run -d -p 9091:9091 prom/pushgateway
+#   2. Configure Prometheus to scrape localhost:9091 (see README.md)
+#   3. Restart Prometheus
 #
 
 PUSHGATEWAY="http://localhost:9091/metrics/job"

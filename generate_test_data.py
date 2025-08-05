@@ -10,10 +10,13 @@ Usage:
 
 Requirements:
     - Prometheus Push Gateway running on localhost:9091
+    - Prometheus configured to scrape Push Gateway (see README.md)
     - pip install requests
 
-Start Push Gateway:
-    docker run -d -p 9091:9091 prom/pushgateway
+Setup:
+    1. Start Push Gateway: docker run -d -p 9091:9091 prom/pushgateway
+    2. Configure Prometheus to scrape localhost:9091 (REQUIRED!)
+    3. Restart Prometheus
 """
 
 import requests
