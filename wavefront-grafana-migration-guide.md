@@ -115,7 +115,12 @@ WAVEFRONT_TOKEN=your-wavefront-token
 
 # Grafana Configuration
 GRAFANA_URL=https://your-grafana.com
-GRAFANA_TOKEN=your-grafana-token
+# Choose one authentication method:
+GRAFANA_TOKEN=your-grafana-token          # Option 1: API Token
+# OR
+GRAFANA_USERNAME=admin                    # Option 2: Username
+GRAFANA_PASSWORD=your-password            # Option 2: Password
+
 DATASOURCE_TYPE=prometheus  # or influxdb, elasticsearch, cloudwatch
 DATASOURCE_UID=your-datasource-uid
 ```
@@ -125,8 +130,10 @@ DATASOURCE_UID=your-datasource-uid
 ### Basic Usage
 
 #### Migrate All Dashboards and Alerts
+
+**Using API Token:**
 ```bash
-python migrate.py \
+python wavefront-grafana-migrator.py \
   --wavefront-url $WAVEFRONT_URL \
   --wavefront-token $WAVEFRONT_TOKEN \
   --grafana-url $GRAFANA_URL \
@@ -135,9 +142,20 @@ python migrate.py \
   --datasource-uid $DATASOURCE_UID
 ```
 
+**Using Username/Password:**
+```bash
+python wavefront-grafana-migrator.py \
+  --wavefront-url $WAVEFRONT_URL \
+  --wavefront-token $WAVEFRONT_TOKEN \
+  --grafana-url $GRAFANA_URL \
+  --grafana-credentials $GRAFANA_USERNAME $GRAFANA_PASSWORD \
+  --datasource-type prometheus \
+  --datasource-uid $DATASOURCE_UID
+```
+
 #### Migrate Specific Dashboards Only
 ```bash
-python migrate.py \
+python wavefront-grafana-migrator.py \
   --wavefront-url $WAVEFRONT_URL \
   --wavefront-token $WAVEFRONT_TOKEN \
   --grafana-url $GRAFANA_URL \
@@ -150,7 +168,7 @@ python migrate.py \
 
 #### Migrate Alerts Only
 ```bash
-python migrate.py \
+python wavefront-grafana-migrator.py \
   --wavefront-url $WAVEFRONT_URL \
   --wavefront-token $WAVEFRONT_TOKEN \
   --grafana-url $GRAFANA_URL \
