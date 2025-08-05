@@ -173,8 +173,11 @@ python wavefront-grafana-migrator.py \
 
 **Option 1: API Token (Recommended)**
 1. Log in to your Grafana instance
-2. Go to Configuration → API Keys
-3. Create a new API key with Editor or Admin role
+2. Navigate to API Keys:
+   - **Grafana 7.x and earlier**: Configuration → API Keys
+   - **Grafana 8.x - 9.x**: Administration → API Keys  
+   - **Grafana 10.x+**: Administration → Users and access → Service accounts
+3. Create a new API key/service account with Editor or Admin role
 4. Use with `--grafana-token` parameter
 
 **Option 2: Username/Password**

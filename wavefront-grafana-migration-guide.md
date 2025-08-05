@@ -59,8 +59,11 @@ The migration process follows these steps:
 
 #### Grafana API Token
 1. Log into Grafana
-2. Navigate to **Configuration** → **API Keys**
-3. Click **Add API key**
+2. Navigate to API Keys (location varies by version):
+   - **Grafana 7.x and earlier**: **Configuration** → **API Keys**
+   - **Grafana 8.x - 9.x**: **Administration** → **API Keys**
+   - **Grafana 10.x+**: **Administration** → **Users and access** → **Service accounts**
+3. Click **Add API key** (or **New service account** for 10.x+)
 4. Set role to **Admin**
 5. Set expiration as needed
 6. Copy and save the token securely
