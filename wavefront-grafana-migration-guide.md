@@ -67,11 +67,39 @@ The migration process follows these steps:
 
 ### 2. Identify Grafana Datasource UID
 
-1. In Grafana, go to **Configuration** → **Data Sources**
-2. Click on your target datasource
-3. Find the UID in:
-   - The URL: `/datasources/edit/{UID}/`
-   - Or in the datasource settings JSON view
+The datasource UID is a unique identifier that Grafana uses internally. You can find it using one of these methods:
+
+#### Method 1: Via Grafana UI
+1. Log into your Grafana instance
+2. Navigate to **Configuration** → **Data Sources** (or **Connections** → **Data sources** in newer versions)
+3. Click on the datasource you want to use (e.g., Prometheus, InfluxDB)
+4. Look at the URL in your browser - it will contain the UID:
+   - Example: `https://grafana.example.com/datasources/edit/abc123def`
+   - The UID is `abc123def`
+
+#### Method 2: Via Grafana API
+```bash
+curl -H "Authorization: Bearer YOUR_GRAFANA_TOKEN" \
+  https://your-grafana-url/api/datasources
+```
+
+This returns JSON with all datasources:
+```json
+[
+  {
+    "id": 1,
+    "uid": "P1234567890",
+    "name": "Prometheus",
+    "type": "prometheus",
+    "url": "http://localhost:9090"
+  }
+]
+```
+
+#### Method 3: Datasource Settings Page
+1. Open the datasource in Grafana
+2. Look for the "UID" field in the settings (some versions display it directly)
+3. It's typically an alphanumeric string like `P1234567890` or `abc123def`
 
 ### 3. Download the Migration Script
 
