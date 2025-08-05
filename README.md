@@ -19,6 +19,41 @@ A Python tool to migrate dashboards and alerts from Wavefront (now VMware Aria O
 - Grafana instance with API access (URL and token)
 - Target datasource configured in Grafana (Prometheus, InfluxDB, etc.)
 
+### Installing Python
+
+#### macOS
+```bash
+# Using Homebrew (recommended)
+brew install python3
+
+# Or download from python.org
+# https://www.python.org/downloads/macos/
+```
+
+#### Ubuntu/Debian
+```bash
+sudo apt update
+sudo apt install python3 python3-pip python3-venv
+```
+
+#### CentOS/RHEL/Fedora
+```bash
+sudo yum install python3 python3-pip
+# or for newer versions:
+sudo dnf install python3 python3-pip
+```
+
+#### Windows
+1. Download from [python.org](https://www.python.org/downloads/windows/)
+2. Run installer and check "Add Python to PATH"
+3. Or use Windows Store: search for "Python 3"
+
+#### Verify Installation
+```bash
+python3 --version
+pip3 --version
+```
+
 ## Installation
 
 1. Clone the repository:
