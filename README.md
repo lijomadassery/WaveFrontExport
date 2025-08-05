@@ -216,6 +216,122 @@ For complex queries, review the generated JSON files and adjust as needed before
 3. **Import Failures**: Ensure the target datasource exists in Grafana with the correct UID
 4. **Missing Panels**: Some Wavefront chart types may not have direct Grafana equivalents
 
+## Testing with Synthetic Data
+
+If you have Grafana dashboards but no data yet, you can generate synthetic test data using Prometheus Push Gateway.
+
+### Quick Setup
+
+1. **Start Push Gateway**:
+```bash
+docker run -d -p 9091:9091 prom/pushgateway
+```
+
+2. **Configure your existing Prometheus** to scrape Push Gateway in `prometheus.yml`:
+```yaml
+scrape_configs:
+  - job_name: 'pushgateway'
+    static_configs:
+      - targets: ['localhost:9091']
+```
+
+3. **Restart Prometheus** to pick up the new configuration
+
+4. **Push sample metrics**:
+```bash
+# CI/CD Pipeline metrics
+echo "ci_build_duration_seconds 45.2" | curl --data-binary @- http://localhost:9091/metrics/job/ci_pipeline/instance/jenkins
+echo "ci_test_count 150" | curl --data-binary @- http://localhost:9091/metrics/job/ci_pipeline/instance/jenkins
+echo "ci_deployment_success 1" | curl --data-binary @- http://localhost:9091/metrics/job/ci_pipeline/instance/production
+
+# Application metrics
+echo "app_requests_total 1250" | curl --data-binary @- http://localhost:9091/metrics/job/webapp/instance/prod
+echo "app_response_time_seconds 0.125" | curl --data-binary @- http://localhost:9091/metrics/job/webapp/instance/prod
+echo "app_error_rate 0.02" | curl --data-binary @- http://localhost:9091/metrics/job/webapp/instance/prod
+```
+
+### Quick Test Data
+
+Use the provided script for instant test data:
+```bash
+# One-time sample data push
+./push_sample_metrics.sh
+```
+
+### Automated Test Data Generation
+
+Use the provided Python script for continuous data generation:
+```bash
+python3 generate_test_data.py
+```
+
+Or create your own `generate_test_data.py`:
+```python
+#!/usr/bin/env python3
+import requests
+import time
+import random
+
+def push_metrics():
+    base_url = "http://localhost:9091/metrics/job"
+    
+    # CI/CD metrics
+    ci_metrics = [
+        f"ci_build_duration_seconds {random.uniform(30, 300)}",
+        f"ci_test_count {random.randint(50, 500)}",
+        f"ci_deployment_success {random.choice([0, 1])}",
+        f"ci_code_coverage_percent {random.uniform(60, 95)}",
+    ]
+    
+    # Application metrics
+    app_metrics = [
+        f"app_requests_total {random.randint(1000, 5000)}",
+        f"app_response_time_seconds {random.uniform(0.1, 2.0)}",
+        f"app_cpu_usage_percent {random.uniform(10, 80)}",
+        f"app_memory_usage_bytes {random.randint(100000000, 1000000000)}",
+    ]
+    
+    # Push CI metrics
+    for metric in ci_metrics:
+        requests.post(f"{base_url}/ci_pipeline/instance/jenkins", data=metric)
+    
+    # Push app metrics  
+    for metric in app_metrics:
+        requests.post(f"{base_url}/webapp/instance/prod", data=metric)
+    
+    print(f"Pushed {len(ci_metrics + app_metrics)} metrics at {time.strftime('%H:%M:%S')}")
+
+if __name__ == "__main__":
+    while True:
+        push_metrics()
+        time.sleep(30)  # Push every 30 seconds
+```
+
+Run the script:
+```bash
+python3 generate_test_data.py
+```
+
+### Verify Data
+
+1. **Push Gateway UI**: http://localhost:9091
+2. **Your existing Prometheus UI**: Check for metrics with `{job="ci_pipeline"}`
+3. **Your existing Grafana**: Dashboards should now display the synthetic data
+
+### Common Test Metrics
+
+```bash
+# Infrastructure metrics
+echo "cpu_usage_percent 45.5" | curl --data-binary @- http://localhost:9091/metrics/job/infrastructure/instance/server1
+echo "memory_usage_percent 67.2" | curl --data-binary @- http://localhost:9091/metrics/job/infrastructure/instance/server1
+echo "disk_usage_percent 23.8" | curl --data-binary @- http://localhost:9091/metrics/job/infrastructure/instance/server1
+
+# Business metrics
+echo "sales_revenue_total 45000" | curl --data-binary @- http://localhost:9091/metrics/job/business/instance/ecommerce
+echo "user_signups_total 125" | curl --data-binary @- http://localhost:9091/metrics/job/business/instance/webapp
+echo "order_conversion_rate 0.034" | curl --data-binary @- http://localhost:9091/metrics/job/business/instance/ecommerce
+```
+
 ## Limitations
 
 - Query translation is simplified and may not cover all WQL functions
