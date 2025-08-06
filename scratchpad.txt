@@ -1,0 +1,81 @@
+http://10.124.130.6/
+
+https://longboard.wavefront.com/api/v2/user
+
+{
+  "status": {
+    "result": "OK",
+    "message": "",
+    "code": 200
+  },
+  "response": [
+    {
+      "tokenID": "f882a0ed-f84e-4875-a124-f42b311bc58c",
+      "tokenName": "Aria PAT",
+      "account": "kevin.baroni@cdcr.ca.gov",
+      "accountType": "USER_ACCOUNT",
+      "lastUsed": 1735711350775,
+      "dateGenerated": 1669920715720
+    },
+    {
+      "tokenID": "edd6e4ce-8f97-433f-9b8a-69f786818a31",
+      "account": "kevin.baroni@cdcr.ca.gov",
+      "accountType": "USER_ACCOUNT",
+      "dateGenerated": 1754430682323
+    },
+    {
+      "tokenID": "68ae105a-eac8-451b-98c6-837611a6b715",
+      "account": "kevin.baroni@cdcr.ca.gov",
+      "accountType": "USER_ACCOUNT",
+      "dateGenerated": 1754431655502
+    }
+  ]
+}
+
+curl https://10.124.130.6
+UserId: admin
+Password: Password1234
+
+UserId: s_admin
+Grafana Token: your-grafana-token
+
+UserId: kbaroni
+Password: Bologna8642
+
+# Create an API key
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -u kbaroni:Bologna8642 \
+  -d '{"name":"Migration Script","role":"Admin"}' \
+http://10.124.130.6:3000/api/auth/keys
+ 
+ 
+curl -u kbaroni:Bologna8642 http://10.124.130.6:3000/api/health
+
+
+curl https://10.124.130.6/api/datasources
+  
+# Migrate specific dashboard from Wavefront to Grafana
+# Example: Migrating "cdcr-cicd-status" dashboard
+. .env_dev
+python3 wavefront-grafana-migrator.py \
+  --wavefront-url $WAVEFRONT_URL \
+  --wavefront-token $WAVEFRONT_TOKEN \
+  --grafana-url $GRAFANA_URL \
+  --grafana-token $GRAFANA_TOKEN \
+  --datasource-type prometheus \
+  --datasource-uid $DATASOURCE_UID \
+  --dashboards "Kubernetes-Resources" \
+  --skip-alerts
+
+# Migrate specific alertfrom Wavefront to Grafana
+. .env_dev
+python3 wavefront-grafana-migrator.py \
+  --wavefront-url $WAVEFRONT_URL \
+  --wavefront-token $WAVEFRONT_TOKEN \
+  --grafana-url $GRAFANA_URL \
+  --grafana-token $GRAFANA_TOKEN \
+  --datasource-type prometheus \
+  --datasource-uid $DATASOURCE_UID \
+  --alerts "1718653973273" \
+  --skip-dashboards

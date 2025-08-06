@@ -173,8 +173,11 @@ python wavefront-grafana-migrator.py \
 
 **Option 1: API Token (Recommended)**
 1. Log in to your Grafana instance
-2. Go to Configuration → API Keys
-3. Create a new API key with Editor or Admin role
+2. Navigate to API Keys:
+   - **Grafana 7.x and earlier**: Configuration → API Keys
+   - **Grafana 8.x - 9.x**: Administration → API Keys  
+   - **Grafana 10.x+**: Administration → Users and access → Service accounts
+3. Create a new API key/service account with Editor or Admin role
 4. Use with `--grafana-token` parameter
 
 **Option 2: Username/Password**
@@ -213,12 +216,277 @@ For complex queries, review the generated JSON files and adjust as needed before
 3. **Import Failures**: Ensure the target datasource exists in Grafana with the correct UID
 4. **Missing Panels**: Some Wavefront chart types may not have direct Grafana equivalents
 
+## Testing with Synthetic Data
+
+If you have Grafana dashboards but no data yet, you can generate synthetic test data using Prometheus Push Gateway.
+
+### Setup Steps
+
+#### 1. Start Push Gateway
+```bash
+docker run -d -p 9091:9091 prom/pushgateway
+```
+
+#### 2. Configure Prometheus (REQUIRED!)
+**Important**: Prometheus doesn't automatically know about Push Gateway - you must tell it where to find it.
+
+**Find your Prometheus configuration file:**
+```bash
+# Common locations:
+/etc/prometheus/prometheus.yml
+/opt/prometheus/prometheus.yml
+
+# Or check running service:
+sudo systemctl status prometheus
+
+# For Docker:
+docker inspect <prometheus-container> | grep -i config
+```
+
+**Edit `prometheus.yml` and add Push Gateway:**
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  # Your existing jobs (keep these)...
+  
+  # ADD THIS NEW JOB:
+  - job_name: 'pushgateway'
+    static_configs:
+      - targets: ['localhost:9091']
+    scrape_interval: 5s    # Optional: scrape more frequently  
+    honor_labels: true     # IMPORTANT: preserves pushed metric labels
+```
+
+#### 3. Restart Prometheus
+```bash
+# If running as service:
+sudo systemctl restart prometheus
+
+# If running in Docker:
+docker restart <prometheus-container-name>
+```
+
+#### 4. Verify Configuration
+1. **Check targets**: http://your-prometheus:9090/targets
+   - Should show `pushgateway (1/1 up)` 
+2. **Test query**: http://your-prometheus:9090/graph  
+   - Query: `up{job="pushgateway"}` should return `1`
+
+**⚠️ Without step 2-3, your test data won't appear in Grafana!**
+
+#### 5. Push Test Data
+```bash
+# CI/CD Pipeline metrics
+echo "ci_build_duration_seconds 45.2" | curl --data-binary @- http://localhost:9091/metrics/job/ci_pipeline/instance/jenkins
+echo "ci_test_count 150" | curl --data-binary @- http://localhost:9091/metrics/job/ci_pipeline/instance/jenkins
+echo "ci_deployment_success 1" | curl --data-binary @- http://localhost:9091/metrics/job/ci_pipeline/instance/production
+
+# Application metrics
+echo "app_requests_total 1250" | curl --data-binary @- http://localhost:9091/metrics/job/webapp/instance/prod
+echo "app_response_time_seconds 0.125" | curl --data-binary @- http://localhost:9091/metrics/job/webapp/instance/prod
+echo "app_error_rate 0.02" | curl --data-binary @- http://localhost:9091/metrics/job/webapp/instance/prod
+```
+
+### Quick Test Data
+
+Use the provided script for instant test data:
+```bash
+# One-time sample data push
+./push_sample_metrics.sh
+```
+
+### Automated Test Data Generation
+
+Use the provided Python script for continuous data generation:
+```bash
+python3 generate_test_data.py
+```
+
+Or create your own `generate_test_data.py`:
+```python
+#!/usr/bin/env python3
+import requests
+import time
+import random
+
+def push_metrics():
+    base_url = "http://localhost:9091/metrics/job"
+    
+    # CI/CD metrics
+    ci_metrics = [
+        f"ci_build_duration_seconds {random.uniform(30, 300)}",
+        f"ci_test_count {random.randint(50, 500)}",
+        f"ci_deployment_success {random.choice([0, 1])}",
+        f"ci_code_coverage_percent {random.uniform(60, 95)}",
+    ]
+    
+    # Application metrics
+    app_metrics = [
+        f"app_requests_total {random.randint(1000, 5000)}",
+        f"app_response_time_seconds {random.uniform(0.1, 2.0)}",
+        f"app_cpu_usage_percent {random.uniform(10, 80)}",
+        f"app_memory_usage_bytes {random.randint(100000000, 1000000000)}",
+    ]
+    
+    # Push CI metrics
+    for metric in ci_metrics:
+        requests.post(f"{base_url}/ci_pipeline/instance/jenkins", data=metric)
+    
+    # Push app metrics  
+    for metric in app_metrics:
+        requests.post(f"{base_url}/webapp/instance/prod", data=metric)
+    
+    print(f"Pushed {len(ci_metrics + app_metrics)} metrics at {time.strftime('%H:%M:%S')}")
+
+if __name__ == "__main__":
+    while True:
+        push_metrics()
+        time.sleep(30)  # Push every 30 seconds
+```
+
+Run the script:
+```bash
+python3 generate_test_data.py
+```
+
+### Verify Data
+
+1. **Push Gateway UI**: http://localhost:9091
+2. **Your existing Prometheus UI**: Check for metrics with `{job="ci_pipeline"}`
+3. **Your existing Grafana**: Dashboards should now display the synthetic data
+
+### Common Test Metrics
+
+```bash
+# Infrastructure metrics
+echo "cpu_usage_percent 45.5" | curl --data-binary @- http://localhost:9091/metrics/job/infrastructure/instance/server1
+echo "memory_usage_percent 67.2" | curl --data-binary @- http://localhost:9091/metrics/job/infrastructure/instance/server1
+echo "disk_usage_percent 23.8" | curl --data-binary @- http://localhost:9091/metrics/job/infrastructure/instance/server1
+
+# Business metrics
+echo "sales_revenue_total 45000" | curl --data-binary @- http://localhost:9091/metrics/job/business/instance/ecommerce
+echo "user_signups_total 125" | curl --data-binary @- http://localhost:9091/metrics/job/business/instance/webapp
+echo "order_conversion_rate 0.034" | curl --data-binary @- http://localhost:9091/metrics/job/business/instance/ecommerce
+```
+
+### Troubleshooting Push Gateway
+
+#### Problem: "No data in Grafana after pushing metrics"
+
+**Check this step by step:**
+
+1. **Is Push Gateway receiving data?**
+   ```bash
+   # Check Push Gateway UI
+   curl http://localhost:9091/metrics
+   # Should show your pushed metrics
+   ```
+
+2. **Is Prometheus scraping Push Gateway?**
+   ```bash
+   # Check Prometheus targets
+   curl http://your-prometheus:9090/api/v1/targets
+   # Look for pushgateway job with "health": "up"
+   ```
+
+3. **Is the `honor_labels: true` setting present?**
+   ```yaml
+   # In prometheus.yml - this is CRITICAL
+   - job_name: 'pushgateway'
+     honor_labels: true  # Without this, labels get overwritten!
+   ```
+
+4. **Did you restart Prometheus after config changes?**
+   ```bash
+   # Configuration changes require restart
+   sudo systemctl restart prometheus
+   ```
+
+#### Problem: "Push Gateway shows 'DOWN' in Prometheus targets"
+
+**Common causes:**
+- Wrong target URL in `prometheus.yml` (check `localhost` vs actual hostname)
+- Firewall blocking port 9091
+- Push Gateway container stopped
+
+**Check:**
+```bash
+# Test connectivity from Prometheus server
+curl http://localhost:9091/metrics
+
+# Check Push Gateway logs
+docker logs <pushgateway-container>
+```
+
+#### Problem: "Metrics appear but with wrong labels"
+
+**Cause**: Missing `honor_labels: true` in Prometheus config
+
+**Fix**: Add `honor_labels: true` to the pushgateway job and restart Prometheus
+
+## Alert Migration Details
+
+The tool now supports modern Grafana alert structure with multi-step evaluation:
+
+### Alert Structure
+Migrated alerts use a 3-step chain:
+1. **Step A**: Query execution (fetches metric data)
+2. **Step B**: Reduce (converts time series to single value using 'last')
+3. **Step C**: Threshold evaluation (applies comparison operator)
+
+### Supported Features
+- ✅ Basic threshold alerts (e.g., `ts(cpu.usage) > 80`)
+- ✅ Multiple conditions with AND/OR logic
+- ✅ Comparison operators: `>`, `>=`, `<`, `<=`, `=`, `!=`
+- ✅ Complex WQL functions:
+  - Aggregations: `avg()`, `sum()`, `max()`, `min()`, `count()`, `stddev()`
+  - Time functions: `rate()`, `deriv()`, `mavg()`, `last()`
+  - Percentiles: `percentile(95, ts(...))`
+  - Aliasing: `aliasMetric()`
+- ✅ Smart reducer type selection based on WQL function
+- ✅ Alert duration (converted from Wavefront minutes)
+- ✅ Tags and annotations
+
+### Advanced Alert Examples
+
+**Multiple Conditions**:
+```
+Wavefront: ts(cpu.usage) > 80 AND ts(memory.usage) > 90
+Grafana: Creates chained conditions with math expressions
+```
+
+**Complex Functions**:
+```
+Wavefront: mavg(5m, ts(response.time)) > 100
+Grafana: avg_over_time(response_time[5m]) > 100
+```
+
+### Remaining Limitations
+- ⚠️ Very complex nested WQL expressions may need adjustment
+- ⚠️ Some Wavefront-specific functions have no direct equivalent
+- ⚠️ Alert severity levels need manual configuration
+
+### Example Alert Migration
+**Wavefront**:
+```
+condition: ts(cpu.usage.percent) > 80
+minutes: 5
+```
+
+**Grafana** (migrated):
+- Query A: `cpu_usage_percent` (PromQL)
+- Expression B: Reduce A using last()
+- Threshold C: B > 80
+- For: 5m
+
 ## Limitations
 
 - Query translation is simplified and may not cover all WQL functions
 - Some Wavefront-specific features may not have Grafana equivalents
 - Complex dashboard layouts may need manual adjustment
-- Alert conditions are simplified during migration
+- Alert conditions with multiple AND/OR clauses need manual configuration
 
 ## Contributing
 
