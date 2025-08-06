@@ -55,6 +55,9 @@ curl -u kbaroni:Bologna8642 http://10.124.130.6:3000/api/health
 
 curl https://10.124.130.6/api/datasources
   
+# Migrate specific dashboard from Wavefront to Grafana
+# Example: Migrating "cdcr-cicd-status" dashboard
+. .env_dev
 python3 wavefront-grafana-migrator.py \
   --wavefront-url $WAVEFRONT_URL \
   --wavefront-token $WAVEFRONT_TOKEN \
@@ -64,3 +67,15 @@ python3 wavefront-grafana-migrator.py \
   --datasource-uid $DATASOURCE_UID \
   --dashboards "cdcr-cicd-status" \
   --skip-alerts
+
+# Migrate specific alertfrom Wavefront to Grafana
+. .env_dev
+python3 wavefront-grafana-migrator.py \
+  --wavefront-url $WAVEFRONT_URL \
+  --wavefront-token $WAVEFRONT_TOKEN \
+  --grafana-url $GRAFANA_URL \
+  --grafana-token $GRAFANA_TOKEN \
+  --datasource-type prometheus \
+  --datasource-uid $DATASOURCE_UID \
+  --alerts "1718653973273" \
+  --skip-dashboards

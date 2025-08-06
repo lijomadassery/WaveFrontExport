@@ -434,6 +434,10 @@ class GrafanaAlertBuilder:
             "data": [
                 {
                     "refId": "A",
+                    "relativeTimeRange": {
+                        "from": 600,
+                        "to": 0
+                    },
                     "queryType": "",
                     "model": {
                         "expr": translated_query if self.datasource_type == DataSourceType.PROMETHEUS else "",
@@ -470,6 +474,142 @@ class GrafanaAlertBuilder:
             "labels": {}
         }
         
+# {
+#     "apiVersion": 1,
+#     "groups": [
+#         {
+#             "orgId": 1,
+#             "name": "5-minutes",
+#             "folder": "misc",
+#             "interval": "5m",
+#             "rules": [
+#                 {
+#                     "uid": "eb2f850d-822d-4ea3-b227-e11e89031bba",
+#                     "title": "Test 1",
+#                     "condition": "C",
+#                     "data": [
+#                         {
+#                             "refId": "A",
+#                             "relativeTimeRange": {
+#                                 "from": 600,
+#                                 "to": 0
+#                             },
+#                             "datasourceUid": "d3b773fb-9d60-4f8c-884d-0734feb77810",
+#                             "model": {
+#                                 "datasource": {
+#                                     "type": "prometheus",
+#                                     "uid": "d3b773fb-9d60-4f8c-884d-0734feb77810"
+#                                 },
+#                                 "disableTextWrap": false,
+#                                 "editorMode": "builder",
+#                                 "expr": ":node_memory_MemAvailable_bytes:sum",
+#                                 "fullMetaSearch": false,
+#                                 "hide": false,
+#                                 "includeNullMetadata": true,
+#                                 "instant": true,
+#                                 "intervalMs": 1000,
+#                                 "legendFormat": "__auto",
+#                                 "maxDataPoints": 43200,
+#                                 "range": false,
+#                                 "refId": "A",
+#                                 "useBackend": false
+#                             }
+#                         },
+#                         {
+#                             "refId": "B",
+#                             "relativeTimeRange": {
+#                                 "from": 600,
+#                                 "to": 0
+#                             },
+#                             "datasourceUid": "__expr__",
+#                             "model": {
+#                                 "conditions": [
+#                                     {
+#                                         "evaluator": {
+#                                             "params": [],
+#                                             "type": "gt"
+#                                         },
+#                                         "operator": {
+#                                             "type": "and"
+#                                         },
+#                                         "query": {
+#                                             "params": [
+#                                                 "B"
+#                                             ]
+#                                         },
+#                                         "reducer": {
+#                                             "params": [],
+#                                             "type": "last"
+#                                         },
+#                                         "type": "query"
+#                                     }
+#                                 ],
+#                                 "datasource": {
+#                                     "type": "__expr__",
+#                                     "uid": "__expr__"
+#                                 },
+#                                 "expression": "A",
+#                                 "intervalMs": 1000,
+#                                 "maxDataPoints": 43200,
+#                                 "reducer": "last",
+#                                 "refId": "B",
+#                                 "type": "reduce"
+#                             }
+#                         },
+#                         {
+#                             "refId": "C",
+#                             "relativeTimeRange": {
+#                                 "from": 600,
+#                                 "to": 0
+#                             },
+#                             "datasourceUid": "__expr__",
+#                             "model": {
+#                                 "conditions": [
+#                                     {
+#                                         "evaluator": {
+#                                             "params": [
+#                                                 0
+#                                             ],
+#                                             "type": "gt"
+#                                         },
+#                                         "operator": {
+#                                             "type": "and"
+#                                         },
+#                                         "query": {
+#                                             "params": [
+#                                                 "C"
+#                                             ]
+#                                         },
+#                                         "reducer": {
+#                                             "params": [],
+#                                             "type": "last"
+#                                         },
+#                                         "type": "query"
+#                                     }
+#                                 ],
+#                                 "datasource": {
+#                                     "type": "__expr__",
+#                                     "uid": "__expr__"
+#                                 },
+#                                 "expression": "B",
+#                                 "intervalMs": 1000,
+#                                 "maxDataPoints": 43200,
+#                                 "refId": "C",
+#                                 "type": "threshold"
+#                             }
+#                         }
+#                     ],
+#                     "noDataState": "NoData",
+#                     "execErrState": "Error",
+#                     "for": "5m",
+#                     "annotations": {},
+#                     "labels": {},
+#                     "isPaused": false
+#                 }
+#             ]
+#         }
+#     ]
+# }
         # Add tags as labels
         if 'tags' in wf_alert:
             for tag in wf_alert.get('tags', []):
