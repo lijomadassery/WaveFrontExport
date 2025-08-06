@@ -65,7 +65,7 @@ python3 wavefront-grafana-migrator.py \
   --grafana-token $GRAFANA_TOKEN \
   --datasource-type prometheus \
   --datasource-uid $DATASOURCE_UID \
-  --dashboards "cdcr-cicd-status" \
+  --dashboards "Kubernetes-Resources" \
   --skip-alerts
 
 # Migrate specific alertfrom Wavefront to Grafana
