@@ -114,6 +114,11 @@ python wavefront-grafana-migrator.py \
 - `--skip-dashboards`: Skip dashboard migration (optional)
 - `--skip-alerts`: Skip alert migration (optional)
 
+**Alert Group Configuration:**
+- `--alert-group-name`: Name for the alert rule group (default: "Wavefront Alerts")
+- `--alert-folder`: Folder name for alerts in Grafana (default: "Wavefront Migration")
+- `--alert-interval`: Evaluation interval for alerts (default: "60s")
+
 ### Examples
 
 #### Migrate all dashboards and alerts:
@@ -138,6 +143,21 @@ python wavefront-grafana-migrator.py \
     --datasource-uid abc123def \
     --dashboards dashboard-id-1 dashboard-id-2 \
     --skip-alerts
+```
+
+#### Migrate alerts with custom group settings:
+```bash
+python wavefront-grafana-migrator.py \
+    --wavefront-url https://your-instance.wavefront.com \
+    --wavefront-token your-token \
+    --grafana-url http://localhost:3000 \
+    --grafana-token your-grafana-token \
+    --datasource-type prometheus \
+    --datasource-uid abc123def \
+    --skip-dashboards \
+    --alert-group-name "Production Alerts" \
+    --alert-folder "Operations" \
+    --alert-interval "30s"
 ```
 
 #### Migrate using username/password (local Grafana):
@@ -194,9 +214,11 @@ python wavefront-grafana-migrator.py \
 
 The tool will:
 1. Save each migrated dashboard as `dashboard_<id>.json`
-2. Save each migrated alert as `alert_<id>.json`
-3. Automatically import to Grafana (unless there are errors)
-4. Provide detailed logs of the migration process
+2. Save individual alert rules as `alert_<uid>.json` for review
+3. Save the complete alert group as `alert_group_<name>.json`
+4. Automatically import to Grafana (unless there are errors)
+5. Create folders in Grafana for alert organization
+6. Provide detailed logs of the migration process
 
 ## Query Translation Notes
 
@@ -428,10 +450,16 @@ docker logs <pushgateway-container>
 
 ## Alert Migration Details
 
-The tool now supports modern Grafana alert structure with multi-step evaluation:
+The tool now supports modern Grafana alert structure with **Alert Rule Groups** and **Folders** for proper organization:
+
+### Alert Rule Groups
+All migrated alerts are organized into alert rule groups with:
+- **Group Name**: Configurable name for your alert collection (default: "Wavefront Alerts")
+- **Folder**: Alerts are placed in a Grafana folder for organization (default: "Wavefront Migration")
+- **Evaluation Interval**: How often alerts are evaluated (default: 60s)
 
 ### Alert Structure
-Migrated alerts use a 3-step chain:
+Each alert uses a 3-step evaluation chain:
 1. **Step A**: Query execution (fetches metric data)
 2. **Step B**: Reduce (converts time series to single value using 'last')
 3. **Step C**: Threshold evaluation (applies comparison operator)
