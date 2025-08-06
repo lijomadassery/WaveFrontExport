@@ -182,6 +182,21 @@ python wavefront-grafana-migrator.py \
   --alerts alert-id-1 alert-id-2
 ```
 
+#### Migrate Alerts with Custom Group Settings
+```bash
+python wavefront-grafana-migrator.py \
+  --wavefront-url $WAVEFRONT_URL \
+  --wavefront-token $WAVEFRONT_TOKEN \
+  --grafana-url $GRAFANA_URL \
+  --grafana-token $GRAFANA_TOKEN \
+  --datasource-type prometheus \
+  --datasource-uid $DATASOURCE_UID \
+  --skip-dashboards \
+  --alert-group-name "Production Alerts" \
+  --alert-folder "Operations" \
+  --alert-interval "30s"
+```
+
 ### Command Line Arguments
 
 | Argument | Required | Description |
@@ -196,12 +211,16 @@ python wavefront-grafana-migrator.py \
 | `--alerts` | No | Space-separated list of specific alert IDs to migrate |
 | `--skip-dashboards` | No | Skip dashboard migration |
 | `--skip-alerts` | No | Skip alert migration |
+| `--alert-group-name` | No | Name for the alert rule group (default: "Wavefront Alerts") |
+| `--alert-folder` | No | Folder name for alerts in Grafana (default: "Wavefront Migration") |
+| `--alert-interval` | No | Evaluation interval for alerts (default: "60s") |
 
 ### Output Files
 
 The script generates JSON files for each migrated item:
 - `dashboard_{id}.json` - Grafana dashboard configurations
-- `alert_{id}.json` - Grafana alert configurations
+- `alert_{uid}.json` - Individual alert rule configurations
+- `alert_group_{name}.json` - Complete alert group configuration with all rules
 
 Review these files before importing to ensure correct translation.
 
@@ -345,6 +364,62 @@ def wql_to_elasticsearch(wql_query: str) -> Dict:
     return "{}"
 ```
 
+## Alert Migration Details
+
+### Alert Rule Groups and Folders
+
+Modern Grafana requires alerts to be organized into **Alert Rule Groups** within **Folders**. The migration tool automatically handles this structure:
+
+1. **Alert Rule Groups**: All migrated alerts are placed in a named group
+   - Configurable via `--alert-group-name` (default: "Wavefront Alerts")
+   - Groups define the evaluation interval for all contained rules
+   - Multiple alerts can be evaluated together for efficiency
+
+2. **Folders**: Alerts are organized in Grafana folders
+   - Configurable via `--alert-folder` (default: "Wavefront Migration")
+   - Folders provide access control and organization
+   - The tool automatically creates folders if they don't exist
+
+3. **Alert Structure**: Each alert uses a 3-step evaluation chain
+   - **Step A**: Query execution (fetches metric data)
+   - **Step B**: Reduce (converts time series to single value)
+   - **Step C**: Threshold evaluation (applies conditions)
+
+### Alert Group JSON Structure
+
+The migrated alerts follow this structure:
+```json
+{
+  "apiVersion": 1,
+  "groups": [{
+    "orgId": 1,
+    "name": "Wavefront Alerts",
+    "folder": "Wavefront Migration",
+    "interval": "60s",
+    "rules": [
+      {
+        "uid": "wf_alert_id",
+        "title": "Alert Name",
+        "condition": "C",
+        "data": [
+          // Query, reduce, and threshold steps
+        ],
+        "noDataState": "NoData",
+        "execErrState": "Alerting",
+        "for": "5m",
+        "annotations": {
+          "description": "Alert description",
+          "summary": "Alert summary"
+        },
+        "labels": {
+          "tag_environment": "production"
+        }
+      }
+    ]
+  }]
+}
+```
+
 ## Validation and Testing
 
 ### Pre-Migration Checklist
@@ -457,6 +532,14 @@ def compare_metrics(wavefront_url, wavefront_token, grafana_url, grafana_token, 
 - Ensure Grafana alerting is enabled
 - Check notification channels are configured
 - Verify query syntax for your datasource
+
+#### 6. Alert Group/Folder Issues
+**Error:** `Failed to import alert group` or alerts missing folder
+**Solution:**
+- Ensure the user has permissions to create folders in Grafana
+- Verify folder name doesn't contain invalid characters
+- Check if folder already exists with different UID
+- Review alert group JSON structure in `alert_group_*.json` file
 
 ### Debug Mode
 
