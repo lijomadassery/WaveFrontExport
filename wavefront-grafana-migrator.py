@@ -904,7 +904,7 @@ class GrafanaImporter:
             return False
     
     def import_alert(self, alert_json: Dict) -> bool:
-        """Import alert rule to Grafana"""
+        """Import alert rule to Grafana (legacy method for individual rules)"""
         try:
             response = requests.post(
                 f"{self.url}/api/v1/provisioning/alert-rules",
@@ -920,6 +920,68 @@ class GrafanaImporter:
             if hasattr(e.response, 'text'):
                 logger.error(f"Response: {e.response.text}")
             return False
+    
+    def import_alert_group(self, alert_group_json: Dict) -> bool:
+        """Import alert rule group to Grafana"""
+        try:
+            # First, ensure the folder exists
+            folder_name = alert_group_json.get('groups', [{}])[0].get('folder', 'Wavefront Migration')
+            self.ensure_folder_exists(folder_name)
+            
+            # Import the alert rule group
+            response = requests.post(
+                f"{self.url}/api/v1/provisioning/alert-rules",
+                headers=self.headers,
+                auth=self.auth,
+                json=alert_group_json
+            )
+            response.raise_for_status()
+            logger.info(f"Successfully imported alert group with {len(alert_group_json.get('groups', [{}])[0].get('rules', []))} rules")
+            return True
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to import alert group: {e}")
+            if hasattr(e.response, 'text'):
+                logger.error(f"Response: {e.response.text}")
+            return False
+    
+    def ensure_folder_exists(self, folder_name: str) -> Optional[str]:
+        """Ensure a folder exists in Grafana, create if not"""
+        try:
+            # Check if folder exists
+            response = requests.get(
+                f"{self.url}/api/folders",
+                headers=self.headers,
+                auth=self.auth
+            )
+            response.raise_for_status()
+            
+            folders = response.json()
+            for folder in folders:
+                if folder.get('title') == folder_name:
+                    logger.info(f"Folder '{folder_name}' already exists")
+                    return folder.get('uid')
+            
+            # Create folder if it doesn't exist
+            folder_data = {
+                "title": folder_name,
+                "uid": folder_name.lower().replace(' ', '-')
+            }
+            
+            response = requests.post(
+                f"{self.url}/api/folders",
+                headers=self.headers,
+                auth=self.auth,
+                json=folder_data
+            )
+            response.raise_for_status()
+            logger.info(f"Created folder: {folder_name}")
+            return response.json().get('uid')
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to ensure folder exists: {e}")
+            if hasattr(e.response, 'text'):
+                logger.error(f"Response: {e.response.text}")
+            return None
 
 
 class MigrationOrchestrator:
@@ -994,8 +1056,9 @@ class MigrationOrchestrator:
         if failed_dashboards:
             logger.warning(f"Failed dashboards: {', '.join(failed_dashboards)}")
     
-    def migrate_alerts(self, alert_ids: Optional[List[str]] = None):
-        """Migrate alerts from Wavefront to Grafana"""
+    def migrate_alerts(self, alert_ids: Optional[List[str]] = None, group_name: str = "Wavefront Alerts", 
+                      folder_name: str = "Wavefront Migration", evaluation_interval: str = "60s"):
+        """Migrate alerts from Wavefront to Grafana as an alert rule group"""
         
         # Get alerts to migrate
         alerts = self.extractor.get_alerts()
@@ -1004,7 +1067,12 @@ class MigrationOrchestrator:
         
         logger.info(f"Migrating {len(alerts)} alerts...")
         
-        success_count = 0
+        if not alerts:
+            logger.warning("No alerts to migrate")
+            return
+        
+        # Build individual alert rules
+        alert_rules = []
         failed_alerts = []
         
         for wf_alert in alerts:
@@ -1014,23 +1082,50 @@ class MigrationOrchestrator:
                 # Convert to Grafana format
                 grafana_alert = self.alert_builder.build_alert(wf_alert)
                 
-                # Save to file for review
-                filename = f"alert_{wf_alert.get('id', 'unknown')}.json"
-                with open(filename, 'w') as f:
-                    json.dump(grafana_alert, f, indent=2)
-                logger.info(f"Saved alert JSON to {filename}")
+                # Add a unique UID for each alert
+                grafana_alert['uid'] = f"wf_{wf_alert.get('id', '')}"[:40]  # Grafana UID limit
                 
-                # Import to Grafana
-                if self.importer.import_alert(grafana_alert):
-                    success_count += 1
-                else:
-                    failed_alerts.append(wf_alert.get('name', 'Unknown'))
-                    
+                alert_rules.append(grafana_alert)
+                
             except Exception as e:
                 logger.error(f"Error processing alert {wf_alert.get('name')}: {e}")
                 failed_alerts.append(wf_alert.get('name', 'Unknown'))
         
-        logger.info(f"Migration complete: {success_count}/{len(alerts)} alerts successful")
+        if not alert_rules:
+            logger.error("No alerts were successfully converted")
+            return
+        
+        # Create alert rule group structure
+        alert_group = {
+            "apiVersion": 1,
+            "groups": [{
+                "orgId": 1,
+                "name": group_name,
+                "folder": folder_name,
+                "interval": evaluation_interval,
+                "rules": alert_rules
+            }]
+        }
+        
+        # Save complete group to file for review
+        group_filename = f"alert_group_{group_name.lower().replace(' ', '_')}.json"
+        with open(group_filename, 'w') as f:
+            json.dump(alert_group, f, indent=2)
+        logger.info(f"Saved alert group JSON to {group_filename}")
+        
+        # Save individual alert files for review
+        for i, rule in enumerate(alert_rules):
+            filename = f"alert_{rule.get('uid', i)}.json"
+            with open(filename, 'w') as f:
+                json.dump(rule, f, indent=2)
+        
+        # Import the alert group to Grafana
+        if self.importer.import_alert_group(alert_group):
+            logger.info(f"Successfully imported alert group with {len(alert_rules)} rules")
+        else:
+            logger.error("Failed to import alert group")
+        
+        logger.info(f"Migration complete: {len(alert_rules)}/{len(alerts)} alerts successful")
         if failed_alerts:
             logger.warning(f"Failed alerts: {', '.join(failed_alerts)}")
 
@@ -1053,6 +1148,14 @@ def main():
     parser.add_argument('--alerts', nargs='*', help='Specific alert IDs to migrate')
     parser.add_argument('--skip-dashboards', action='store_true', help='Skip dashboard migration')
     parser.add_argument('--skip-alerts', action='store_true', help='Skip alert migration')
+    
+    # Alert group configuration options
+    parser.add_argument('--alert-group-name', default='Wavefront Alerts', 
+                       help='Name for the alert rule group (default: Wavefront Alerts)')
+    parser.add_argument('--alert-folder', default='Wavefront Migration', 
+                       help='Folder name for alerts in Grafana (default: Wavefront Migration)')
+    parser.add_argument('--alert-interval', default='60s', 
+                       help='Evaluation interval for alerts (default: 60s)')
     
     args = parser.parse_args()
     
@@ -1085,7 +1188,12 @@ def main():
         orchestrator.migrate_dashboards(args.dashboards)
     
     if not args.skip_alerts:
-        orchestrator.migrate_alerts(args.alerts)
+        orchestrator.migrate_alerts(
+            alert_ids=args.alerts,
+            group_name=args.alert_group_name,
+            folder_name=args.alert_folder,
+            evaluation_interval=args.alert_interval
+        )
     
     logger.info("Migration process completed!")
 
