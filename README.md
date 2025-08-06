@@ -426,12 +426,67 @@ docker logs <pushgateway-container>
 
 **Fix**: Add `honor_labels: true` to the pushgateway job and restart Prometheus
 
+## Alert Migration Details
+
+The tool now supports modern Grafana alert structure with multi-step evaluation:
+
+### Alert Structure
+Migrated alerts use a 3-step chain:
+1. **Step A**: Query execution (fetches metric data)
+2. **Step B**: Reduce (converts time series to single value using 'last')
+3. **Step C**: Threshold evaluation (applies comparison operator)
+
+### Supported Features
+- ✅ Basic threshold alerts (e.g., `ts(cpu.usage) > 80`)
+- ✅ Multiple conditions with AND/OR logic
+- ✅ Comparison operators: `>`, `>=`, `<`, `<=`, `=`, `!=`
+- ✅ Complex WQL functions:
+  - Aggregations: `avg()`, `sum()`, `max()`, `min()`, `count()`, `stddev()`
+  - Time functions: `rate()`, `deriv()`, `mavg()`, `last()`
+  - Percentiles: `percentile(95, ts(...))`
+  - Aliasing: `aliasMetric()`
+- ✅ Smart reducer type selection based on WQL function
+- ✅ Alert duration (converted from Wavefront minutes)
+- ✅ Tags and annotations
+
+### Advanced Alert Examples
+
+**Multiple Conditions**:
+```
+Wavefront: ts(cpu.usage) > 80 AND ts(memory.usage) > 90
+Grafana: Creates chained conditions with math expressions
+```
+
+**Complex Functions**:
+```
+Wavefront: mavg(5m, ts(response.time)) > 100
+Grafana: avg_over_time(response_time[5m]) > 100
+```
+
+### Remaining Limitations
+- ⚠️ Very complex nested WQL expressions may need adjustment
+- ⚠️ Some Wavefront-specific functions have no direct equivalent
+- ⚠️ Alert severity levels need manual configuration
+
+### Example Alert Migration
+**Wavefront**:
+```
+condition: ts(cpu.usage.percent) > 80
+minutes: 5
+```
+
+**Grafana** (migrated):
+- Query A: `cpu_usage_percent` (PromQL)
+- Expression B: Reduce A using last()
+- Threshold C: B > 80
+- For: 5m
+
 ## Limitations
 
 - Query translation is simplified and may not cover all WQL functions
 - Some Wavefront-specific features may not have Grafana equivalents
 - Complex dashboard layouts may need manual adjustment
-- Alert conditions are simplified during migration
+- Alert conditions with multiple AND/OR clauses need manual configuration
 
 ## Contributing
 

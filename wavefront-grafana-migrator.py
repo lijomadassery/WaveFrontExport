@@ -128,17 +128,60 @@ class QueryTranslator:
             else:
                 promql = metric
             
-            # Handle common WQL functions
-            if 'rate(' in wql_query:
-                promql = f"rate({promql}[5m])"
-            elif 'avg(' in wql_query:
+            # Handle complex WQL functions with proper nesting
+            wql_lower = wql_query.lower()
+            
+            # Handle moving averages: mavg(1m, ts(...)) -> avg_over_time(...[1m])
+            mavg_pattern = r'mavg\((\d+[smhd]),\s*ts\('
+            if re.search(mavg_pattern, wql_lower):
+                mavg_match = re.search(r'mavg\((\d+[smhd])', wql_lower)
+                if mavg_match:
+                    duration = mavg_match.group(1)
+                    promql = f"avg_over_time({promql}[{duration}])"
+            
+            # Handle rate: rate(ts(...)) -> rate(...[5m])
+            elif 'rate(' in wql_lower:
+                # Extract rate duration if specified, default to 5m
+                rate_pattern = r'rate\((\d+[smhd]),\s*ts\('
+                rate_match = re.search(rate_pattern, wql_lower)
+                duration = rate_match.group(1) if rate_match else '5m'
+                promql = f"rate({promql}[{duration}])"
+            
+            # Handle percentiles: percentile(95, ts(...)) -> quantile(0.95, ...)
+            elif 'percentile(' in wql_lower:
+                percentile_match = re.search(r'percentile\((\d+)', wql_lower)
+                if percentile_match:
+                    percentile = float(percentile_match.group(1)) / 100
+                    promql = f"quantile({percentile}, {promql})"
+            
+            # Handle standard aggregations
+            elif 'avg(' in wql_lower:
                 promql = f"avg({promql})"
-            elif 'sum(' in wql_query:
+            elif 'sum(' in wql_lower:
                 promql = f"sum({promql})"
-            elif 'max(' in wql_query:
+            elif 'max(' in wql_lower:
                 promql = f"max({promql})"
-            elif 'min(' in wql_query:
+            elif 'min(' in wql_lower:
                 promql = f"min({promql})"
+            elif 'count(' in wql_lower:
+                promql = f"count({promql})"
+            elif 'stddev(' in wql_lower:
+                promql = f"stddev({promql})"
+            
+            # Handle derivatives: deriv(ts(...)) -> deriv(...[5m])
+            elif 'deriv(' in wql_lower:
+                promql = f"deriv({promql}[5m])"
+            
+            # Handle last: last(ts(...)) -> last_over_time(...[5m])
+            elif 'last(' in wql_lower:
+                promql = f"last_over_time({promql}[5m])"
+            
+            # Handle aliasMetric: aliasMetric(ts(...), "name") -> label_replace(..., "__name__", "name", "", "")
+            alias_pattern = r'aliasMetric\(.*,\s*["\']([^"\']+)["\']'
+            alias_match = re.search(alias_pattern, wql_query)
+            if alias_match:
+                new_name = alias_match.group(1)
+                promql = f'label_replace({promql}, "__name__", "{new_name}", "", "")'
             
             return promql
         
@@ -423,46 +466,238 @@ class GrafanaAlertBuilder:
     def build_alert(self, wf_alert: Dict) -> Dict:
         """Convert Wavefront alert to Grafana alert rule"""
         
-        # Translate the condition query
+        # Parse the Wavefront condition for queries and thresholds
         condition = wf_alert.get('condition', '')
-        translated_query = QueryTranslator.translate(condition, self.datasource_type)
+        queries, threshold_info = self._parse_wavefront_condition(condition)
+        
+        # Determine reducer type based on WQL functions
+        reducer_type = self._determine_reducer_type(condition)
+        
+        # Build the data array with chained steps
+        data = []
+        
+        # Step A: Main query
+        if queries:
+            # Handle both simple string queries and dict queries
+            if isinstance(queries[0], dict):
+                primary_query = queries[0]['query']
+                threshold_info = {
+                    'operator': self._map_operator(queries[0]['operator']),
+                    'value': queries[0]['value']
+                }
+            else:
+                primary_query = queries[0]
+            
+            translated_query = QueryTranslator.translate(primary_query, self.datasource_type)
+            
+            data.append({
+                "refId": "A",
+                "relativeTimeRange": {
+                    "from": 600,
+                    "to": 0
+                },
+                "datasourceUid": self.datasource_uid,
+                "model": {
+                    "datasource": {
+                        "type": self.datasource_type.value,
+                        "uid": self.datasource_uid
+                    },
+                    "expr": translated_query if self.datasource_type == DataSourceType.PROMETHEUS else "",
+                    "query": translated_query if self.datasource_type == DataSourceType.INFLUXDB else "",
+                    "instant": True,
+                    "intervalMs": 1000,
+                    "maxDataPoints": 43200,
+                    "refId": "A"
+                }
+            })
+            
+            # Step B: Reduce expression (convert series to single value)
+            data.append({
+                "refId": "B",
+                "relativeTimeRange": {
+                    "from": 600,
+                    "to": 0
+                },
+                "datasourceUid": "__expr__",
+                "model": {
+                    "conditions": [
+                        {
+                            "evaluator": {
+                                "params": [],
+                                "type": "gt"
+                            },
+                            "operator": {
+                                "type": "and"
+                            },
+                            "query": {
+                                "params": ["B"]
+                            },
+                            "reducer": {
+                                "params": [],
+                                "type": "last"
+                            },
+                            "type": "query"
+                        }
+                    ],
+                    "datasource": {
+                        "type": "__expr__",
+                        "uid": "__expr__"
+                    },
+                    "expression": "A",
+                    "intervalMs": 1000,
+                    "maxDataPoints": 43200,
+                    "reducer": reducer_type,
+                    "refId": "B",
+                    "type": "reduce"
+                }
+            })
+            
+            # Step C: Threshold evaluation
+            data.append({
+                "refId": "C",
+                "relativeTimeRange": {
+                    "from": 600,
+                    "to": 0
+                },
+                "datasourceUid": "__expr__",
+                "model": {
+                    "conditions": [
+                        {
+                            "evaluator": {
+                                "params": [threshold_info.get('value', 0)],
+                                "type": threshold_info.get('operator', 'gt')
+                            },
+                            "operator": {
+                                "type": "and"
+                            },
+                            "query": {
+                                "params": ["C"]
+                            },
+                            "reducer": {
+                                "params": [],
+                                "type": "last"
+                            },
+                            "type": "query"
+                        }
+                    ],
+                    "datasource": {
+                        "type": "__expr__",
+                        "uid": "__expr__"
+                    },
+                    "expression": "B",
+                    "intervalMs": 1000,
+                    "maxDataPoints": 43200,
+                    "refId": "C",
+                    "type": "threshold"
+                }
+            })
+            
+            # Handle additional queries for AND/OR conditions
+            if len(queries) > 1:
+                # Add support for multiple query conditions
+                current_ref = "C"
+                
+                for i, query_item in enumerate(queries[1:], start=1):
+                    prev_ref = current_ref
+                    query_ref = chr(68 + i * 3)  # D, G, J, etc.
+                    reduce_ref = chr(69 + i * 3)  # E, H, K, etc.
+                    threshold_ref = chr(70 + i * 3)  # F, I, L, etc.
+                    
+                    # Extract query and threshold from dict or string
+                    if isinstance(query_item, dict):
+                        query = query_item['query']
+                        query_threshold = {
+                            'operator': self._map_operator(query_item['operator']),
+                            'value': query_item['value']
+                        }
+                    else:
+                        query = query_item
+                        query_threshold = threshold_info
+                    
+                    # Add query step
+                    translated_query = QueryTranslator.translate(query, self.datasource_type)
+                    data.append({
+                        "refId": query_ref,
+                        "relativeTimeRange": {"from": 600, "to": 0},
+                        "datasourceUid": self.datasource_uid,
+                        "model": {
+                            "datasource": {
+                                "type": self.datasource_type.value,
+                                "uid": self.datasource_uid
+                            },
+                            "expr": translated_query if self.datasource_type == DataSourceType.PROMETHEUS else "",
+                            "query": translated_query if self.datasource_type == DataSourceType.INFLUXDB else "",
+                            "instant": True,
+                            "intervalMs": 1000,
+                            "maxDataPoints": 43200,
+                            "refId": query_ref
+                        }
+                    })
+                    
+                    # Add reduce step
+                    data.append({
+                        "refId": reduce_ref,
+                        "relativeTimeRange": {"from": 600, "to": 0},
+                        "datasourceUid": "__expr__",
+                        "model": {
+                            "datasource": {"type": "__expr__", "uid": "__expr__"},
+                            "expression": query_ref,
+                            "reducer": reducer_type,
+                            "type": "reduce",
+                            "refId": reduce_ref
+                        }
+                    })
+                    
+                    # Add threshold step
+                    data.append({
+                        "refId": threshold_ref,
+                        "relativeTimeRange": {"from": 600, "to": 0},
+                        "datasourceUid": "__expr__",
+                        "model": {
+                            "conditions": [{
+                                "evaluator": {
+                                    "params": [query_threshold.get('value', 0)],
+                                    "type": query_threshold.get('operator', 'gt')
+                                },
+                                "operator": {"type": "and"},
+                                "query": {"params": [threshold_ref]},
+                                "reducer": {"params": [], "type": "last"},
+                                "type": "query"
+                            }],
+                            "datasource": {"type": "__expr__", "uid": "__expr__"},
+                            "expression": reduce_ref,
+                            "type": "threshold",
+                            "refId": threshold_ref
+                        }
+                    })
+                    
+                    # Add math expression to combine conditions
+                    combine_ref = chr(71 + i * 3)  # G, J, M, etc.
+                    operator = self._extract_logical_operator(condition, i)
+                    math_expr = f"${prev_ref} {operator} ${threshold_ref}"
+                    
+                    data.append({
+                        "refId": combine_ref,
+                        "relativeTimeRange": {"from": 600, "to": 0},
+                        "datasourceUid": "__expr__",
+                        "model": {
+                            "datasource": {"type": "__expr__", "uid": "__expr__"},
+                            "expression": math_expr,
+                            "type": "math",
+                            "refId": combine_ref
+                        }
+                    })
+                    
+                    current_ref = combine_ref
+                
+                # Update final condition reference
+                alert_rule["condition"] = current_ref
         
         alert_rule = {
             "uid": None,
             "title": wf_alert.get('name', 'Migrated Alert'),
-            "condition": "A",
-            "data": [
-                {
-                    "refId": "A",
-                    "relativeTimeRange": {
-                        "from": 600,
-                        "to": 0
-                    },
-                    "queryType": "",
-                    "model": {
-                        "expr": translated_query if self.datasource_type == DataSourceType.PROMETHEUS else "",
-                        "query": translated_query if self.datasource_type == DataSourceType.INFLUXDB else "",
-                        "refId": "A",
-                        "datasource": {
-                            "type": self.datasource_type.value,
-                            "uid": self.datasource_uid
-                        }
-                    },
-                    "datasourceUid": self.datasource_uid,
-                    "conditions": [
-                        {
-                            "evaluator": {
-                                "params": [self._extract_threshold(wf_alert)],
-                                "type": "gt"
-                            },
-                            "operator": {"type": "and"},
-                            "query": {"params": ["A"]},
-                            "reducer": {"params": [], "type": "last"},
-                            "type": "query"
-                        }
-                    ]
-                }
-            ],
+            "condition": "C",  # Final step is the condition
+            "data": data,
             "noDataState": "NoData",
             "execErrState": "Alerting",
             "for": self._convert_duration(wf_alert.get('minutes', 5)),
@@ -473,143 +708,7 @@ class GrafanaAlertBuilder:
             },
             "labels": {}
         }
-        
-# {
-#     "apiVersion": 1,
-#     "groups": [
-#         {
-#             "orgId": 1,
-#             "name": "5-minutes",
-#             "folder": "misc",
-#             "interval": "5m",
-#             "rules": [
-#                 {
-#                     "uid": "eb2f850d-822d-4ea3-b227-e11e89031bba",
-#                     "title": "Test 1",
-#                     "condition": "C",
-#                     "data": [
-#                         {
-#                             "refId": "A",
-#                             "relativeTimeRange": {
-#                                 "from": 600,
-#                                 "to": 0
-#                             },
-#                             "datasourceUid": "d3b773fb-9d60-4f8c-884d-0734feb77810",
-#                             "model": {
-#                                 "datasource": {
-#                                     "type": "prometheus",
-#                                     "uid": "d3b773fb-9d60-4f8c-884d-0734feb77810"
-#                                 },
-#                                 "disableTextWrap": false,
-#                                 "editorMode": "builder",
-#                                 "expr": ":node_memory_MemAvailable_bytes:sum",
-#                                 "fullMetaSearch": false,
-#                                 "hide": false,
-#                                 "includeNullMetadata": true,
-#                                 "instant": true,
-#                                 "intervalMs": 1000,
-#                                 "legendFormat": "__auto",
-#                                 "maxDataPoints": 43200,
-#                                 "range": false,
-#                                 "refId": "A",
-#                                 "useBackend": false
-#                             }
-#                         },
-#                         {
-#                             "refId": "B",
-#                             "relativeTimeRange": {
-#                                 "from": 600,
-#                                 "to": 0
-#                             },
-#                             "datasourceUid": "__expr__",
-#                             "model": {
-#                                 "conditions": [
-#                                     {
-#                                         "evaluator": {
-#                                             "params": [],
-#                                             "type": "gt"
-#                                         },
-#                                         "operator": {
-#                                             "type": "and"
-#                                         },
-#                                         "query": {
-#                                             "params": [
-#                                                 "B"
-#                                             ]
-#                                         },
-#                                         "reducer": {
-#                                             "params": [],
-#                                             "type": "last"
-#                                         },
-#                                         "type": "query"
-#                                     }
-#                                 ],
-#                                 "datasource": {
-#                                     "type": "__expr__",
-#                                     "uid": "__expr__"
-#                                 },
-#                                 "expression": "A",
-#                                 "intervalMs": 1000,
-#                                 "maxDataPoints": 43200,
-#                                 "reducer": "last",
-#                                 "refId": "B",
-#                                 "type": "reduce"
-#                             }
-#                         },
-#                         {
-#                             "refId": "C",
-#                             "relativeTimeRange": {
-#                                 "from": 600,
-#                                 "to": 0
-#                             },
-#                             "datasourceUid": "__expr__",
-#                             "model": {
-#                                 "conditions": [
-#                                     {
-#                                         "evaluator": {
-#                                             "params": [
-#                                                 0
-#                                             ],
-#                                             "type": "gt"
-#                                         },
-#                                         "operator": {
-#                                             "type": "and"
-#                                         },
-#                                         "query": {
-#                                             "params": [
-#                                                 "C"
-#                                             ]
-#                                         },
-#                                         "reducer": {
-#                                             "params": [],
-#                                             "type": "last"
-#                                         },
-#                                         "type": "query"
-#                                     }
-#                                 ],
-#                                 "datasource": {
-#                                     "type": "__expr__",
-#                                     "uid": "__expr__"
-#                                 },
-#                                 "expression": "B",
-#                                 "intervalMs": 1000,
-#                                 "maxDataPoints": 43200,
-#                                 "refId": "C",
-#                                 "type": "threshold"
-#                             }
-#                         }
-#                     ],
-#                     "noDataState": "NoData",
-#                     "execErrState": "Error",
-#                     "for": "5m",
-#                     "annotations": {},
-#                     "labels": {},
-#                     "isPaused": false
-#                 }
-#             ]
-#         }
-#     ]
-# }
+       
         # Add tags as labels
         if 'tags' in wf_alert:
             for tag in wf_alert.get('tags', []):
@@ -617,16 +716,141 @@ class GrafanaAlertBuilder:
         
         return alert_rule
     
+    def _parse_wavefront_condition(self, condition: str) -> tuple:
+        """Parse Wavefront condition to extract queries and threshold info"""
+        import re
+        
+        queries = []
+        threshold_info = {'operator': 'gt', 'value': 0}
+        
+        # Handle complex conditions with AND/OR
+        # Split by AND/OR while preserving the operators
+        parts = re.split(r'\s+(AND|OR)\s+', condition, flags=re.IGNORECASE)
+        
+        for part in parts:
+            if part.upper() in ['AND', 'OR']:
+                continue
+                
+            # Extract ts() queries from this part
+            ts_pattern = r'ts\([^)]+\)'
+            ts_matches = re.findall(ts_pattern, part)
+            
+            if ts_matches:
+                # Each ts() with its condition is a separate query
+                for ts_match in ts_matches:
+                    # Find the threshold for this specific query
+                    remaining = part.replace(ts_match, '').strip()
+                    threshold_match = re.search(r'([<>]=?|=)\s*([\d.]+)', remaining)
+                    
+                    if threshold_match:
+                        queries.append({
+                            'query': ts_match,
+                            'operator': threshold_match.group(1),
+                            'value': float(threshold_match.group(2))
+                        })
+                    else:
+                        queries.append({
+                            'query': ts_match,
+                            'operator': '>',
+                            'value': 0
+                        })
+        
+        # If no structured queries found, fall back to simple parsing
+        if not queries:
+            ts_pattern = r'ts\([^)]+\)'
+            ts_matches = re.findall(ts_pattern, condition)
+            
+            if ts_matches:
+                # Simple case with one threshold for all
+                threshold_pattern = r'([<>]=?|=)\s*([\d.]+)'
+                threshold_match = re.search(threshold_pattern, condition)
+                
+                if threshold_match:
+                    operator_map = {
+                        '>': 'gt',
+                        '>=': 'gte',
+                        '<': 'lt',
+                        '<=': 'lte',
+                        '=': 'eq'
+                    }
+                    operator = threshold_match.group(1)
+                    value = float(threshold_match.group(2))
+                    
+                    threshold_info = {
+                        'operator': operator_map.get(operator, 'gt'),
+                        'value': value
+                    }
+                
+                queries = ts_matches
+            elif condition.strip():
+                queries = [condition.strip()]
+        
+        return queries, threshold_info
+    
+    def _map_operator(self, operator: str) -> str:
+        """Map comparison operators to Grafana format"""
+        operator_map = {
+            '>': 'gt',
+            '>=': 'gte',
+            '<': 'lt',
+            '<=': 'lte',
+            '=': 'eq',
+            '==': 'eq',
+            '!=': 'neq'
+        }
+        return operator_map.get(operator, 'gt')
+    
+    def _extract_logical_operator(self, condition: str, position: int) -> str:
+        """Extract AND/OR operator at given position"""
+        import re
+        
+        # Split by AND/OR
+        parts = re.split(r'\s+(AND|OR)\s+', condition, flags=re.IGNORECASE)
+        
+        # Find the operator at the given position
+        operator_count = 0
+        for i, part in enumerate(parts):
+            if part.upper() in ['AND', 'OR']:
+                if operator_count == position - 1:
+                    return '&&' if part.upper() == 'AND' else '||'
+                operator_count += 1
+        
+        # Default to AND
+        return '&&'
+    
+    def _determine_reducer_type(self, condition: str) -> str:
+        """Determine the appropriate reducer type based on WQL functions"""
+        condition_lower = condition.lower()
+        
+        # Map WQL functions to Grafana reducer types
+        if 'avg(' in condition_lower or 'mavg(' in condition_lower:
+            return 'mean'
+        elif 'sum(' in condition_lower:
+            return 'sum'
+        elif 'max(' in condition_lower:
+            return 'max'
+        elif 'min(' in condition_lower:
+            return 'min'
+        elif 'count(' in condition_lower:
+            return 'count'
+        elif 'stddev(' in condition_lower:
+            return 'stdDev'
+        elif 'last(' in condition_lower:
+            return 'last'
+        elif 'median(' in condition_lower:
+            return 'median'
+        elif 'first(' in condition_lower:
+            return 'first'
+        else:
+            # Default to 'last' for most recent value
+            return 'last'
+    
     def _extract_threshold(self, wf_alert: Dict) -> float:
         """Extract threshold value from Wavefront alert condition"""
-        # This is simplified - you may need to parse the condition more carefully
+        # This is kept for backward compatibility but now uses the new parser
         condition = wf_alert.get('condition', '')
-        # Look for comparison operators
-        import re
-        match = re.search(r'[<>]=?\s*([\d.]+)', condition)
-        if match:
-            return float(match.group(1))
-        return 0
+        _, threshold_info = self._parse_wavefront_condition(condition)
+        return threshold_info.get('value', 0)
     
     def _convert_duration(self, minutes: int) -> str:
         """Convert minutes to Grafana duration string"""
