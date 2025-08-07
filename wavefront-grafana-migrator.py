@@ -463,7 +463,7 @@ class GrafanaAlertBuilder:
         self.datasource_type = datasource_type
         self.datasource_uid = datasource_uid
     
-    def build_alert(self, wf_alert: Dict) -> Dict:
+    def build_alert(self, wf_alert: Dict, folder_uid: str, rule_group: str) -> Dict:
         """Convert Wavefront alert to Grafana alert rule"""
         
         # Parse the Wavefront condition for queries and thresholds
@@ -693,20 +693,25 @@ class GrafanaAlertBuilder:
                 # Update final condition reference
                 alert_rule["condition"] = current_ref
         
+        # Build alert rule with proper Grafana structure
         alert_rule = {
-            "uid": None,
+            "uid": f"wf_{wf_alert.get('id', '')}"[:40],  # Grafana UID limit
             "title": wf_alert.get('name', 'Migrated Alert'),
             "condition": "C",  # Final step is the condition
             "data": data,
+            "ruleGroup": rule_group,
+            "folderUID": folder_uid,
+            "orgID": 1,
             "noDataState": "NoData",
-            "execErrState": "Alerting",
+            "execErrState": "Error",  # Changed from "Alerting" to "Error"
             "for": self._convert_duration(wf_alert.get('minutes', 5)),
             "annotations": {
                 "description": wf_alert.get('additionalInformation', ''),
                 "runbook_url": "",
                 "summary": wf_alert.get('name', '')
             },
-            "labels": {}
+            "labels": {},
+            "isPaused": False
         }
        
         # Add tags as labels
@@ -903,17 +908,23 @@ class GrafanaImporter:
                 logger.error(f"Response: {e.response.text}")
             return False
     
-    def import_alert(self, alert_json: Dict) -> bool:
-        """Import alert rule to Grafana (legacy method for individual rules)"""
+    
+    def import_alert_rule(self, alert_rule: Dict) -> bool:
+        """Import a single alert rule to Grafana"""
         try:
+            # Display the alert before posting
+            logger.info("Alert to be posted:")
+            logger.info(json.dumps(alert_rule, indent=2))
+            
+            # Import the alert rule
             response = requests.post(
                 f"{self.url}/api/v1/provisioning/alert-rules",
                 headers=self.headers,
                 auth=self.auth,
-                json=alert_json
+                json=alert_rule
             )
             response.raise_for_status()
-            logger.info(f"Successfully imported alert: {alert_json.get('title')}")
+            logger.info(f"Successfully imported alert: {alert_rule.get('title')}")
             return True
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to import alert: {e}")
@@ -921,31 +932,8 @@ class GrafanaImporter:
                 logger.error(f"Response: {e.response.text}")
             return False
     
-    def import_alert_group(self, alert_group_json: Dict) -> bool:
-        """Import alert rule group to Grafana"""
-        try:
-            # First, ensure the folder exists
-            folder_name = alert_group_json.get('groups', [{}])[0].get('folder', 'Wavefront Migration')
-            self.ensure_folder_exists(folder_name)
-            
-            # Import the alert rule group
-            response = requests.post(
-                f"{self.url}/api/v1/provisioning/alert-rules",
-                headers=self.headers,
-                auth=self.auth,
-                json=alert_group_json
-            )
-            response.raise_for_status()
-            logger.info(f"Successfully imported alert group with {len(alert_group_json.get('groups', [{}])[0].get('rules', []))} rules")
-            return True
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to import alert group: {e}")
-            if hasattr(e.response, 'text'):
-                logger.error(f"Response: {e.response.text}")
-            return False
-    
-    def ensure_folder_exists(self, folder_name: str) -> Optional[str]:
-        """Ensure a folder exists in Grafana, create if not"""
+    def get_or_create_folder(self, folder_name: str) -> Optional[str]:
+        """Get folder UID, create folder if it doesn't exist"""
         try:
             # Check if folder exists
             response = requests.get(
@@ -958,7 +946,7 @@ class GrafanaImporter:
             folders = response.json()
             for folder in folders:
                 if folder.get('title') == folder_name:
-                    logger.info(f"Folder '{folder_name}' already exists")
+                    logger.info(f"Folder '{folder_name}' exists with UID: {folder.get('uid')}")
                     return folder.get('uid')
             
             # Create folder if it doesn't exist
@@ -974,11 +962,12 @@ class GrafanaImporter:
                 json=folder_data
             )
             response.raise_for_status()
-            logger.info(f"Created folder: {folder_name}")
-            return response.json().get('uid')
+            folder_uid = response.json().get('uid')
+            logger.info(f"Created folder '{folder_name}' with UID: {folder_uid}")
+            return folder_uid
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to ensure folder exists: {e}")
+            logger.error(f"Failed to get/create folder: {e}")
             if hasattr(e.response, 'text'):
                 logger.error(f"Response: {e.response.text}")
             return None
@@ -1118,7 +1107,7 @@ class MigrationOrchestrator:
     
     def migrate_alerts(self, alert_ids: Optional[List[str]] = None, group_name: str = "Wavefront Alerts", 
                       folder_name: str = "Wavefront Migration", evaluation_interval: str = "60s"):
-        """Migrate alerts from Wavefront to Grafana as an alert rule group"""
+        """Migrate alerts from Wavefront to Grafana"""
         
         # Get alerts to migrate
         alerts = self.extractor.get_alerts()
@@ -1131,61 +1120,46 @@ class MigrationOrchestrator:
             logger.warning("No alerts to migrate")
             return
         
-        # Build individual alert rules
-        alert_rules = []
+        # Get or create folder and get its UID
+        folder_uid = self.importer.get_or_create_folder(folder_name)
+        if not folder_uid:
+            logger.error(f"Failed to get/create folder '{folder_name}'")
+            return
+        
+        logger.info(f"Using folder '{folder_name}' with UID: {folder_uid}")
+        
+        # Process each alert individually
+        success_count = 0
         failed_alerts = []
         
         for wf_alert in alerts:
             try:
                 logger.info(f"Processing alert: {wf_alert.get('name', 'Unknown')}")
                 
-                # Convert to Grafana format
-                grafana_alert = self.alert_builder.build_alert(wf_alert)
+                # Convert to Grafana format with folder and group info
+                grafana_alert = self.alert_builder.build_alert(
+                    wf_alert, 
+                    folder_uid=folder_uid,
+                    rule_group=group_name
+                )
                 
-                # Add a unique UID for each alert
-                grafana_alert['uid'] = f"wf_{wf_alert.get('id', '')}"[:40]  # Grafana UID limit
+                # Save individual alert file for review
+                filename = f"alert_{grafana_alert.get('uid', 'unknown')}.json"
+                with open(filename, 'w') as f:
+                    json.dump(grafana_alert, f, indent=2)
+                logger.info(f"Saved alert JSON to {filename}")
                 
-                alert_rules.append(grafana_alert)
+                # Import the alert to Grafana
+                if self.importer.import_alert_rule(grafana_alert):
+                    success_count += 1
+                else:
+                    failed_alerts.append(wf_alert.get('name', 'Unknown'))
                 
             except Exception as e:
                 logger.error(f"Error processing alert {wf_alert.get('name')}: {e}")
                 failed_alerts.append(wf_alert.get('name', 'Unknown'))
         
-        if not alert_rules:
-            logger.error("No alerts were successfully converted")
-            return
-        
-        # Create alert rule group structure
-        alert_group = {
-            "apiVersion": 1,
-            "groups": [{
-                "orgId": 1,
-                "name": group_name,
-                "folder": folder_name,
-                "interval": evaluation_interval,
-                "rules": alert_rules
-            }]
-        }
-        
-        # Save complete group to file for review
-        group_filename = f"alert_group_{group_name.lower().replace(' ', '_')}.json"
-        with open(group_filename, 'w') as f:
-            json.dump(alert_group, f, indent=2)
-        logger.info(f"Saved alert group JSON to {group_filename}")
-        
-        # Save individual alert files for review
-        for i, rule in enumerate(alert_rules):
-            filename = f"alert_{rule.get('uid', i)}.json"
-            with open(filename, 'w') as f:
-                json.dump(rule, f, indent=2)
-        
-        # Import the alert group to Grafana
-        if self.importer.import_alert_group(alert_group):
-            logger.info(f"Successfully imported alert group with {len(alert_rules)} rules")
-        else:
-            logger.error("Failed to import alert group")
-        
-        logger.info(f"Migration complete: {len(alert_rules)}/{len(alerts)} alerts successful")
+        logger.info(f"Migration complete: {success_count}/{len(alerts)} alerts successful")
         if failed_alerts:
             logger.warning(f"Failed alerts: {', '.join(failed_alerts)}")
     
