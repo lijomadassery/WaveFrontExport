@@ -197,16 +197,66 @@ python wavefront-grafana-migrator.py \
   --alert-interval "30s"
 ```
 
+### Alert Management (Deletion)
+
+The tool also provides functionality to delete existing alerts in Grafana, which is useful for:
+- Cleaning up before migration
+- Removing test or outdated alerts
+- Managing alerts programmatically across multiple instances
+
+#### Delete All Alerts in a Folder
+```bash
+python wavefront-grafana-migrator.py \
+  --grafana-url $GRAFANA_URL \
+  --grafana-token $GRAFANA_TOKEN \
+  --delete-alerts \
+  --delete-by folder \
+  --delete-value "Wavefront Migration"
+```
+
+#### Delete Alerts Matching a Pattern
+```bash
+# Delete all alerts with "CPU" in the title
+python wavefront-grafana-migrator.py \
+  --grafana-url $GRAFANA_URL \
+  --grafana-token $GRAFANA_TOKEN \
+  --delete-alerts \
+  --delete-by pattern \
+  --delete-value ".*CPU.*"
+
+# Delete alerts starting with "test_"
+python wavefront-grafana-migrator.py \
+  --grafana-url $GRAFANA_URL \
+  --grafana-token $GRAFANA_TOKEN \
+  --delete-alerts \
+  --delete-by pattern \
+  --delete-value "^test_.*"
+```
+
+#### Delete a Specific Alert by UID
+```bash
+python wavefront-grafana-migrator.py \
+  --grafana-url $GRAFANA_URL \
+  --grafana-token $GRAFANA_TOKEN \
+  --delete-alerts \
+  --delete-by uid \
+  --delete-value "wf_1234567890"
+```
+
+**Note**: Alert deletion mode only requires Grafana credentials, not Wavefront access.
+
 ### Command Line Arguments
+
+#### Migration Arguments
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `--wavefront-url` | Yes | Wavefront API endpoint URL |
-| `--wavefront-token` | Yes | Wavefront API authentication token |
 | `--grafana-url` | Yes | Grafana API endpoint URL |
-| `--grafana-token` | Yes | Grafana API authentication token |
-| `--datasource-type` | Yes | Target datasource type: `prometheus`, `influxdb`, `elasticsearch`, `cloudwatch` |
-| `--datasource-uid` | Yes | UID of the Grafana datasource to use |
+| `--grafana-token` or `--grafana-credentials` | Yes | Grafana authentication (token or username/password) |
+| `--wavefront-url` | Yes* | Wavefront API endpoint URL (*for migration) |
+| `--wavefront-token` | Yes* | Wavefront API authentication token (*for migration) |
+| `--datasource-type` | Yes* | Target datasource type: `prometheus`, `influxdb`, `elasticsearch`, `cloudwatch` (*for migration) |
+| `--datasource-uid` | Yes* | UID of the Grafana datasource to use (*for migration) |
 | `--dashboards` | No | Space-separated list of specific dashboard IDs to migrate |
 | `--alerts` | No | Space-separated list of specific alert IDs to migrate |
 | `--skip-dashboards` | No | Skip dashboard migration |
@@ -214,6 +264,14 @@ python wavefront-grafana-migrator.py \
 | `--alert-group-name` | No | Name for the alert rule group (default: "Wavefront Alerts") |
 | `--alert-folder` | No | Folder name for alerts in Grafana (default: "Wavefront Migration") |
 | `--alert-interval` | No | Evaluation interval for alerts (default: "60s") |
+
+#### Alert Deletion Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--delete-alerts` | Yes* | Enable alert deletion mode (*for deletion) |
+| `--delete-by` | Yes* | Deletion criteria: `folder`, `pattern`, or `uid` (*when using --delete-alerts) |
+| `--delete-value` | Yes* | Value for deletion criteria (*when using --delete-alerts) |
 
 ### Output Files
 
@@ -540,6 +598,15 @@ def compare_metrics(wavefront_url, wavefront_token, grafana_url, grafana_token, 
 - Verify folder name doesn't contain invalid characters
 - Check if folder already exists with different UID
 - Review alert group JSON structure in `alert_group_*.json` file
+
+#### 7. Alert Deletion Issues
+**Error:** `Failed to delete alert rule` or no alerts deleted
+**Solution:**
+- Verify the alert UID exists (check in Grafana UI or API)
+- For folder deletion, ensure folder name matches exactly (case-sensitive)
+- For pattern deletion, test your regex pattern
+- Check user permissions - need Admin or Editor role to delete alerts
+- Use `--delete-by pattern --delete-value ".*"` to list all alerts (be careful!)
 
 ### Debug Mode
 
