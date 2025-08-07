@@ -6,6 +6,7 @@ A Python tool to migrate dashboards and alerts from Wavefront (now VMware Aria O
 
 - **Dashboard Migration**: Converts Wavefront dashboards to Grafana format
 - **Alert Migration**: Transforms Wavefront alerts to Grafana alert rules
+- **Alert Management**: Delete existing Grafana alerts by folder, pattern, or UID
 - **Query Translation**: Translates Wavefront Query Language (WQL) to:
   - PromQL (Prometheus)
   - InfluxQL (InfluxDB)
@@ -119,6 +120,11 @@ python wavefront-grafana-migrator.py \
 - `--alert-folder`: Folder name for alerts in Grafana (default: "Wavefront Migration")
 - `--alert-interval`: Evaluation interval for alerts (default: "60s")
 
+**Alert Deletion Options:**
+- `--delete-alerts`: Enable alert deletion mode instead of migration
+- `--delete-by`: Deletion criteria: `folder`, `pattern`, or `uid`
+- `--delete-value`: Value for deletion (folder name, regex pattern, or alert UID)
+
 ### Examples
 
 #### Migrate all dashboards and alerts:
@@ -180,6 +186,38 @@ python wavefront-grafana-migrator.py \
     --grafana-token your-grafana-token \
     --datasource-type influxdb \
     --datasource-uid your-influx-uid
+```
+
+### Alert Management (Delete Operations)
+
+#### Delete all alerts in a specific folder:
+```bash
+python wavefront-grafana-migrator.py \
+    --grafana-url http://localhost:3000 \
+    --grafana-token your-grafana-token \
+    --delete-alerts \
+    --delete-by folder \
+    --delete-value "Wavefront Migration"
+```
+
+#### Delete alerts matching a pattern:
+```bash
+python wavefront-grafana-migrator.py \
+    --grafana-url http://localhost:3000 \
+    --grafana-token your-grafana-token \
+    --delete-alerts \
+    --delete-by pattern \
+    --delete-value ".*CPU.*"  # Regex pattern
+```
+
+#### Delete a specific alert by UID:
+```bash
+python wavefront-grafana-migrator.py \
+    --grafana-url http://localhost:3000 \
+    --grafana-token your-grafana-token \
+    --delete-alerts \
+    --delete-by uid \
+    --delete-value "wf_1234567890"
 ```
 
 ## Getting Required Information
