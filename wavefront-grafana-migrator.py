@@ -47,7 +47,7 @@ class WavefrontExtractor:
         self.url = url.rstrip('/')
         self.token = token
         self.headers = {'Authorization': f'Bearer {token}'}
-    
+
     def get_all_dashboards(self) -> List[Dict]:
         """Fetch all dashboards from Wavefront"""
         try:
@@ -78,7 +78,7 @@ class WavefrontExtractor:
             return None
     
     def get_alerts(self) -> List[Dict]:
-        """Fetch all alerts from Wavefront"""
+        logger.info("Fetch all alerts from Wavefront")
         try:
             response = requests.get(
                 f"{self.url}/api/v2/alert",
@@ -92,6 +92,21 @@ class WavefrontExtractor:
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to fetch alerts: {e}")
             return []
+
+    def get_alert(self, id: str) -> Dict:
+        logger.info(f"Fetch alert {id} from Wavefront")
+        try:
+            response = requests.get(
+                f"{self.url}/api/v2/alert/{id}",
+                headers=self.headers
+            )
+            response.raise_for_status()
+            return response.json().get('response', {})
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch alert {id}: {e}")
+            if hasattr(e.response, 'text'):
+                logger.error(f"Response: {e.response.text}")
+            return {}
 
 
 class QueryTranslator:
@@ -468,8 +483,17 @@ class GrafanaAlertBuilder:
         
         # Parse the Wavefront condition for queries and thresholds
         condition = wf_alert.get('condition', '')
+        conditions = wf_alert.get('conditions', [])
         queries, threshold_info = self._parse_wavefront_condition(condition)
-        
+
+        # Build the threshold and threshold query on a severe threshold
+        if conditions.get('severe', ''):
+            query, threshold = self._parse_wavefront_condition(conditions.get('severe', ''))
+            if threshold:
+                threshold_info = threshold
+            # logger.info("severe query: %s", query)
+            # logger.info("severe threshold_info: %s", threshold_info)
+
         # Determine reducer type based on WQL functions
         reducer_type = self._determine_reducer_type(condition)
         
@@ -482,9 +506,13 @@ class GrafanaAlertBuilder:
             if isinstance(queries[0], dict):
                 primary_query = queries[0]['query']
                 threshold_info = {
-                    'operator': self._map_operator(queries[0]['operator']),
-                    'value': queries[0]['value']
+                    'operator': threshold_info.get('operator', 'gt'),
+                    'value': threshold_info.get('value', 0)
                 }
+                # threshold_info = {
+                #     'operator': self._map_operator(queries[0]['operator']),
+                #     'value': queries[0]['value']
+                # }
             else:
                 primary_query = queries[0]
             
@@ -731,6 +759,7 @@ class GrafanaAlertBuilder:
         # Handle complex conditions with AND/OR
         # Split by AND/OR while preserving the operators
         parts = re.split(r'\s+(AND|OR)\s+', condition, flags=re.IGNORECASE)
+        # logger.info("parts: %s", parts)
         
         for part in parts:
             if part.upper() in ['AND', 'OR']:
@@ -739,7 +768,7 @@ class GrafanaAlertBuilder:
             # Extract ts() queries from this part
             ts_pattern = r'ts\([^)]+\)'
             ts_matches = re.findall(ts_pattern, part)
-            
+
             if ts_matches:
                 # Each ts() with its condition is a separate query
                 for ts_match in ts_matches:
@@ -769,7 +798,7 @@ class GrafanaAlertBuilder:
                 # Simple case with one threshold for all
                 threshold_pattern = r'([<>]=?|=)\s*([\d.]+)'
                 threshold_match = re.search(threshold_pattern, condition)
-                
+
                 if threshold_match:
                     operator_map = {
                         '>': 'gt',
@@ -787,7 +816,32 @@ class GrafanaAlertBuilder:
                     }
                 
                 queries = ts_matches
+
             elif condition.strip():
+                # Simple case with one threshold for all
+                threshold_pattern = r'([<>]=?|=)\s*([\d.]+)'
+                threshold_match = re.search(threshold_pattern, condition)
+
+                if threshold_match:
+                    operator_map = {
+                        '>': 'gt',
+                        '>=': 'gte',
+                        '<': 'lt',
+                        '<=': 'lte',
+                        '=': 'eq'
+                    }
+                    operator = threshold_match.group(1)
+                    value = float(threshold_match.group(2))
+                    
+                    threshold_info = {
+                        'operator': operator_map.get(operator, 'gt'),
+                        'value': value
+                    }
+
+                # Strip out operators and everything after it to give a clean query
+                condition = condition.split('>')[0]
+                condition = condition.split('<')[0]
+                condition = condition.split('=')[0]
                 queries = [condition.strip()]
         
         return queries, threshold_info
@@ -878,12 +932,14 @@ class GrafanaImporter:
             # Token-based authentication
             self.headers = {
                 'Authorization': f'Bearer {token}',
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-Disable-Provenance': 'true'
             }
         elif username and password:
             # Basic authentication
             self.headers = {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-Disable-Provenance': 'true'
             }
             self.auth = (username, password)
         else:
@@ -913,9 +969,10 @@ class GrafanaImporter:
         """Import a single alert rule to Grafana"""
         try:
             # Display the alert before posting
+            # logger.info(f"self.headers: {json.dumps(self.headers, indent=2)}")
             logger.info("Alert to be posted:")
             logger.info(json.dumps(alert_rule, indent=2))
-            
+
             # Import the alert rule
             response = requests.post(
                 f"{self.url}/api/v1/provisioning/alert-rules",
@@ -987,7 +1044,7 @@ class GrafanaImporter:
             if hasattr(e.response, 'text'):
                 logger.error(f"Response: {e.response.text}")
             return []
-    
+
     def delete_alert_rule(self, uid: str) -> bool:
         """Delete a specific alert rule by UID"""
         try:
@@ -1110,10 +1167,18 @@ class MigrationOrchestrator:
         """Migrate alerts from Wavefront to Grafana"""
         
         # Get alerts to migrate
-        alerts = self.extractor.get_alerts()
         if alert_ids:
-            alerts = [a for a in alerts if a['id'] in alert_ids]
-        
+            alerts = []
+            # Fetch each alert by ID
+            logger.info(f"Fetching specific alerts from Wavefront")
+            for alert_id in alert_ids:
+                alert = self.extractor.get_alert(alert_id)
+                if alert:
+                    alerts.append(alert)
+            # alerts = [a for a in alerts if a['id'] in alert_ids]
+        else:
+            alerts = self.extractor.get_alerts()
+
         logger.info(f"Migrating {len(alerts)} alerts...")
         
         if not alerts:

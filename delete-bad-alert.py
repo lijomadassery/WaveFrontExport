@@ -995,7 +995,7 @@ class GrafanaImporter:
             )
             response.raise_for_status()
             logger.info(f"Successfully read alert with UID: {alert_uid}")
-            logger.info(f"alert: {response.json()}")
+            logger.info(json.dumps(response.json(), indent=2))
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to read alert {alert_uid}: {e}")
             if hasattr(e.response, 'text'):

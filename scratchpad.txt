@@ -77,7 +77,7 @@ python3 wavefront-grafana-migrator.py \
   --grafana-token $GRAFANA_TOKEN \
   --datasource-type prometheus \
   --datasource-uid $DATASOURCE_UID \
-  --alerts "1724941576183" \
+  --alerts "1727123778665" \
   --skip-dashboards
 
 # Delete specific alert in Grafana
@@ -89,7 +89,7 @@ python3 delete-bad-alert.py \
   --grafana-token $GRAFANA_TOKEN \
   --datasource-type prometheus \
   --datasource-uid $DATASOURCE_UID \
-  --delete-alerts "eb2f850d-822d-4ea3-b227-e11e89031bba" \
+  --delete-alerts "wf_1724941576183" \
   --skip-dashboards
 
 
