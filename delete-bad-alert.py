@@ -983,65 +983,38 @@ class GrafanaImporter:
                 logger.error(f"Response: {e.response.text}")
             return None
     
-    def get_alert_rules(self) -> List[Dict]:
-        """Get all alert rules from Grafana"""
+    def delete_alert(self, alert_uid: str) -> bool:
+        """Delete an alert rule from Grafana by its UID"""
+
         try:
             response = requests.get(
-                f"{self.url}/api/v1/provisioning/alert-rules",
+                f"{self.url}/api/v1/provisioning/alert-rules/{alert_uid}",
                 headers=self.headers,
                 auth=self.auth
             )
             response.raise_for_status()
-            return response.json()
+            logger.info(f"Successfully read alert with UID: {alert_uid}")
+            logger.info(f"alert: {response.json()}")
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to get alert rules: {e}")
-            if hasattr(e.response, 'text'):
-                logger.error(f"Response: {e.response.text}")
-            return []
-    
-    def delete_alert_rule(self, uid: str) -> bool:
-        """Delete a specific alert rule by UID"""
-        try:
-            response = requests.delete(
-                f"{self.url}/api/v1/provisioning/alert-rules/{uid}",
-                headers=self.headers,
-                auth=self.auth
-            )
-            response.raise_for_status()
-            logger.info(f"Successfully deleted alert rule: {uid}")
-            return True
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to delete alert rule {uid}: {e}")
+            logger.error(f"Failed to read alert {alert_uid}: {e}")
             if hasattr(e.response, 'text'):
                 logger.error(f"Response: {e.response.text}")
             return False
-    
-    def delete_alerts_by_folder(self, folder_name: str) -> int:
-        """Delete all alert rules in a specific folder"""
-        alert_rules = self.get_alert_rules()
-        deleted_count = 0
-        
-        for rule in alert_rules:
-            if rule.get('folderTitle') == folder_name:
-                if self.delete_alert_rule(rule['uid']):
-                    deleted_count += 1
-        
-        logger.info(f"Deleted {deleted_count} alerts from folder '{folder_name}'")
-        return deleted_count
-    
-    def delete_alerts_by_pattern(self, pattern: str) -> int:
-        """Delete alert rules matching a name pattern"""
-        import re
-        alert_rules = self.get_alert_rules()
-        deleted_count = 0
-        
-        for rule in alert_rules:
-            if re.search(pattern, rule.get('title', ''), re.IGNORECASE):
-                if self.delete_alert_rule(rule['uid']):
-                    deleted_count += 1
-        
-        logger.info(f"Deleted {deleted_count} alerts matching pattern '{pattern}'")
-        return deleted_count
+
+        try:
+            response = requests.delete(
+                f"{self.url}/api/v1/provisioning/alert-rules/{alert_uid}",
+                headers=self.headers,
+                auth=self.auth
+            )
+            response.raise_for_status()
+            logger.info(f"Successfully deleted alert with UID: {alert_uid}")
+            return True
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to delete alert {alert_uid}: {e}")
+            if hasattr(e.response, 'text'):
+                logger.error(f"Response: {e.response.text}")
+            return False
 
 
 class MigrationOrchestrator:
@@ -1189,51 +1162,46 @@ class MigrationOrchestrator:
         if failed_alerts:
             logger.warning(f"Failed alerts: {', '.join(failed_alerts)}")
     
-    def delete_alerts(self, delete_by: str, value: str) -> int:
-        """Delete alerts from Grafana based on criteria"""
-        if delete_by == 'folder':
-            return self.importer.delete_alerts_by_folder(value)
-        elif delete_by == 'pattern':
-            return self.importer.delete_alerts_by_pattern(value)
-        elif delete_by == 'uid':
-            # Delete specific alert by UID
-            if self.importer.delete_alert_rule(value):
-                return 1
-            return 0
-        else:
-            logger.error(f"Unknown delete criteria: {delete_by}")
-            return 0
+    def delete_alert(self, alert_uid: str) -> bool:
+        """Delete an alert from Grafana by its UID"""
+        return self.importer.delete_alert(alert_uid)
+    
+    def delete_alerts(self, alert_uids: List[str]) -> Dict[str, bool]:
+        """Delete multiple alerts from Grafana by their UIDs
+        
+        Returns:
+            Dict mapping alert UIDs to success status
+        """
+        results = {}
+        for alert_uid in alert_uids:
+            logger.info(f"Deleting alert: {alert_uid}")
+            results[alert_uid] = self.delete_alert(alert_uid)
+        
+        success_count = sum(1 for success in results.values() if success)
+        logger.info(f"Deletion complete: {success_count}/{len(alert_uids)} alerts successfully deleted")
+        
+        return results
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Migrate Wavefront dashboards and alerts to Grafana, or manage Grafana alerts')
-    
-    # Alert deletion options (at the top to check early)
-    parser.add_argument('--delete-alerts', action='store_true', 
-                       help='Delete alerts from Grafana instead of migrating')
-    parser.add_argument('--delete-by', choices=['folder', 'pattern', 'uid'],
-                       help='Delete criteria: folder name, title pattern, or specific UID')
-    parser.add_argument('--delete-value', 
-                       help='Value for delete criteria (folder name, regex pattern, or UID)')
-    
+    parser = argparse.ArgumentParser(description='Migrate Wavefront dashboards and alerts to Grafana')
+    parser.add_argument('--wavefront-url', required=True, help='Wavefront API URL')
+    parser.add_argument('--wavefront-token', required=True, help='Wavefront API token')
     parser.add_argument('--grafana-url', required=True, help='Grafana API URL')
     # Grafana authentication - either token OR username/password
     auth_group = parser.add_mutually_exclusive_group(required=True)
     auth_group.add_argument('--grafana-token', help='Grafana API token')
     auth_group.add_argument('--grafana-credentials', nargs=2, metavar=('USERNAME', 'PASSWORD'), 
                            help='Grafana username and password')
-    
-    # Migration-specific arguments (not required for deletion)
-    parser.add_argument('--wavefront-url', help='Wavefront API URL')
-    parser.add_argument('--wavefront-token', help='Wavefront API token')
-    parser.add_argument('--datasource-type', 
+    parser.add_argument('--datasource-type', required=True, 
                        choices=['prometheus', 'influxdb', 'elasticsearch', 'cloudwatch'],
                        help='Target datasource type in Grafana')
-    parser.add_argument('--datasource-uid', help='Grafana datasource UID')
+    parser.add_argument('--datasource-uid', required=True, help='Grafana datasource UID')
     parser.add_argument('--dashboards', nargs='*', help='Specific dashboard IDs to migrate')
     parser.add_argument('--alerts', nargs='*', help='Specific alert IDs to migrate')
     parser.add_argument('--skip-dashboards', action='store_true', help='Skip dashboard migration')
     parser.add_argument('--skip-alerts', action='store_true', help='Skip alert migration')
+    parser.add_argument('--delete-alerts', nargs='*', help='Alert UIDs to delete from Grafana')
     
     # Alert group configuration options
     parser.add_argument('--alert-group-name', default='Wavefront Alerts', 
@@ -1255,39 +1223,7 @@ def main():
     elif args.grafana_credentials:
         grafana_username, grafana_password = args.grafana_credentials
     
-    # Handle alert deletion mode
-    if args.delete_alerts:
-        if not args.delete_by or not args.delete_value:
-            parser.error("--delete-alerts requires both --delete-by and --delete-value")
-        
-        # Create importer for deletion (doesn't need full orchestrator)
-        importer = GrafanaImporter(
-            args.grafana_url,
-            token=grafana_token,
-            username=grafana_username,
-            password=grafana_password
-        )
-        
-        # Perform deletion
-        if args.delete_by == 'folder':
-            deleted = importer.delete_alerts_by_folder(args.delete_value)
-            logger.info(f"Deleted {deleted} alerts from folder '{args.delete_value}'")
-        elif args.delete_by == 'pattern':
-            deleted = importer.delete_alerts_by_pattern(args.delete_value)
-            logger.info(f"Deleted {deleted} alerts matching pattern '{args.delete_value}'")
-        elif args.delete_by == 'uid':
-            success = importer.delete_alert_rule(args.delete_value)
-            logger.info(f"Alert deletion {'successful' if success else 'failed'} for UID: {args.delete_value}")
-        
-        return
-    
-    # For migration mode, validate required arguments
-    if not args.wavefront_url or not args.wavefront_token:
-        parser.error("Migration requires --wavefront-url and --wavefront-token")
-    if not args.datasource_type or not args.datasource_uid:
-        parser.error("Migration requires --datasource-type and --datasource-uid")
-    
-    # Create configuration for migration
+    # Create configuration
     config = MigrationConfig(
         wavefront_url=args.wavefront_url,
         wavefront_token=args.wavefront_token,
@@ -1301,6 +1237,13 @@ def main():
     
     # Run migration
     orchestrator = MigrationOrchestrator(config)
+    
+    # Handle alert deletion if requested
+    if args.delete_alerts:
+        logger.info(f"Deleting {len(args.delete_alerts)} alerts...")
+        orchestrator.delete_alerts(args.delete_alerts)
+        logger.info("Alert deletion process completed!")
+        return
     
     if not args.skip_dashboards:
         orchestrator.migrate_dashboards(args.dashboards)
