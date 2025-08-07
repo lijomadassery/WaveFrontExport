@@ -253,7 +253,7 @@ python wavefront-grafana-migrator.py \
 The tool will:
 1. Save each migrated dashboard as `dashboard_<id>.json`
 2. Save individual alert rules as `alert_<uid>.json` for review
-3. Save the complete alert group as `alert_group_<name>.json`
+3. Display each alert JSON before posting to Grafana
 4. Automatically import to Grafana (unless there are errors)
 5. Create folders in Grafana for alert organization
 6. Provide detailed logs of the migration process
@@ -488,13 +488,13 @@ docker logs <pushgateway-container>
 
 ## Alert Migration Details
 
-The tool now supports modern Grafana alert structure with **Alert Rule Groups** and **Folders** for proper organization:
+The tool now supports modern Grafana alert structure with proper **Folders** and **Rule Groups**:
 
-### Alert Rule Groups
-All migrated alerts are organized into alert rule groups with:
-- **Group Name**: Configurable name for your alert collection (default: "Wavefront Alerts")
+### Alert Organization
+Migrated alerts are organized with:
 - **Folder**: Alerts are placed in a Grafana folder for organization (default: "Wavefront Migration")
-- **Evaluation Interval**: How often alerts are evaluated (default: 60s)
+- **Rule Group**: Group name for alert evaluation (default: "Wavefront Alerts")
+- Each alert is posted individually with folder and group information embedded
 
 ### Alert Structure
 Each alert uses a 3-step evaluation chain:

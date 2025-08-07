@@ -277,10 +277,9 @@ python wavefront-grafana-migrator.py \
 
 The script generates JSON files for each migrated item:
 - `dashboard_{id}.json` - Grafana dashboard configurations
-- `alert_{uid}.json` - Individual alert rule configurations
-- `alert_group_{name}.json` - Complete alert group configuration with all rules
+- `alert_{uid}.json` - Individual alert rule configurations (with folder and group info embedded)
 
-Review these files before importing to ensure correct translation.
+The tool also displays each alert JSON in the console before posting for review.
 
 ## Query Translation Reference
 
@@ -424,59 +423,84 @@ def wql_to_elasticsearch(wql_query: str) -> Dict:
 
 ## Alert Migration Details
 
-### Alert Rule Groups and Folders
+### Alert Organization
 
-Modern Grafana requires alerts to be organized into **Alert Rule Groups** within **Folders**. The migration tool automatically handles this structure:
+Modern Grafana requires alerts to have **Folders** and **Rule Groups**. The migration tool automatically handles this:
 
-1. **Alert Rule Groups**: All migrated alerts are placed in a named group
-   - Configurable via `--alert-group-name` (default: "Wavefront Alerts")
-   - Groups define the evaluation interval for all contained rules
-   - Multiple alerts can be evaluated together for efficiency
-
-2. **Folders**: Alerts are organized in Grafana folders
+1. **Folders**: Alerts are organized in Grafana folders
    - Configurable via `--alert-folder` (default: "Wavefront Migration")
    - Folders provide access control and organization
    - The tool automatically creates folders if they don't exist
+   - Folder UID is obtained and embedded in each alert
+
+2. **Rule Groups**: Alerts belong to a rule group for evaluation
+   - Configurable via `--alert-group-name` (default: "Wavefront Alerts")
+   - All alerts in a group are evaluated together
+   - Group name is embedded in each alert
 
 3. **Alert Structure**: Each alert uses a 3-step evaluation chain
    - **Step A**: Query execution (fetches metric data)
    - **Step B**: Reduce (converts time series to single value)
    - **Step C**: Threshold evaluation (applies conditions)
 
-### Alert Group JSON Structure
+### Alert JSON Structure
 
-The migrated alerts follow this structure:
+Each migrated alert is posted individually with this structure:
 ```json
 {
-  "apiVersion": 1,
-  "groups": [{
-    "orgId": 1,
-    "name": "Wavefront Alerts",
-    "folder": "Wavefront Migration",
-    "interval": "60s",
-    "rules": [
-      {
-        "uid": "wf_alert_id",
-        "title": "Alert Name",
-        "condition": "C",
-        "data": [
-          // Query, reduce, and threshold steps
-        ],
-        "noDataState": "NoData",
-        "execErrState": "Alerting",
-        "for": "5m",
-        "annotations": {
-          "description": "Alert description",
-          "summary": "Alert summary"
-        },
-        "labels": {
-          "tag_environment": "production"
-        }
+  "uid": "wf_1234567890",
+  "title": "Alert Name",
+  "condition": "C",
+  "data": [
+    // Step A: Query
+    {
+      "refId": "A",
+      "datasourceUid": "prometheus-uid",
+      "model": { /* query configuration */ }
+    },
+    // Step B: Reduce
+    {
+      "refId": "B",
+      "datasourceUid": "__expr__",
+      "model": {
+        "type": "reduce",
+        "expression": "A",
+        "reducer": "last"
       }
-    ]
-  }]
+    },
+    // Step C: Threshold
+    {
+      "refId": "C",
+      "datasourceUid": "__expr__",
+      "model": {
+        "type": "threshold",
+        "expression": "B"
+      }
+    }
+  ],
+  "ruleGroup": "Wavefront Alerts",
+  "folderUID": "wavefront-migration",
+  "orgID": 1,
+  "noDataState": "NoData",
+  "execErrState": "Error",
+  "for": "5m",
+  "annotations": {
+    "description": "Alert description",
+    "summary": "Alert summary"
+  },
+  "labels": {
+    "tag_environment": "production"
+  },
+  "isPaused": false
 }
 ```
+
+### Migration Process
+
+1. **Get/Create Folder**: The tool gets or creates the specified folder and obtains its UID
+2. **Build Alert**: Each Wavefront alert is converted with folder UID and group name embedded
+3. **Display Alert**: The complete alert JSON is displayed in logs before posting
+4. **Post Alert**: Each alert is posted individually to Grafana's provisioning API
 
 ## Validation and Testing
 
