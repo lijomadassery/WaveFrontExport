@@ -986,6 +986,7 @@ class GrafanaImporter:
     def delete_alert(self, alert_uid: str) -> bool:
         """Delete an alert rule from Grafana by its UID"""
 
+        # Read & display the json object before deleting it
         try:
             response = requests.get(
                 f"{self.url}/api/v1/provisioning/alert-rules/{alert_uid}",
@@ -1001,6 +1002,7 @@ class GrafanaImporter:
                 logger.error(f"Response: {e.response.text}")
             return False
 
+        # Now delete the alert
         try:
             response = requests.delete(
                 f"{self.url}/api/v1/provisioning/alert-rules/{alert_uid}",
