@@ -68,6 +68,17 @@ python3 wavefront-grafana-migrator.py \
   --dashboards "Kubernetes-Resources" \
   --skip-alerts
 
+### Migrate ALL alerts from Wavefront to Grafana ###
+. .env_dev
+python3 wavefront-grafana-migrator.py \
+  --wavefront-url $WAVEFRONT_URL \
+  --wavefront-token $WAVEFRONT_TOKEN \
+  --grafana-url $GRAFANA_URL \
+  --grafana-token $GRAFANA_TOKEN \
+  --datasource-type prometheus \
+  --datasource-uid $DATASOURCE_UID \
+  --skip-dashboards
+
 # Migrate specific alert from Wavefront to Grafana
 . .env_dev
 python3 wavefront-grafana-migrator.py \
@@ -77,21 +88,22 @@ python3 wavefront-grafana-migrator.py \
   --grafana-token $GRAFANA_TOKEN \
   --datasource-type prometheus \
   --datasource-uid $DATASOURCE_UID \
-  --alerts "1727123778665" \
+  --alerts "1724941576183" "1734108148091" \
   --skip-dashboards
 
 # Delete specific alert in Grafana
 . .env_dev
-python3 delete-bad-alert.py \
-  --wavefront-url $WAVEFRONT_URL \
-  --wavefront-token $WAVEFRONT_TOKEN \
+python3 delete-alerts.py \
   --grafana-url $GRAFANA_URL \
   --grafana-token $GRAFANA_TOKEN \
-  --datasource-type prometheus \
-  --datasource-uid $DATASOURCE_UID \
-  --delete-alerts "wf_1724941576183" \
-  --skip-dashboards
+  --delete-alerts "wf_1724941576183"
 
+# Delete all alerts in json file from Grafana
+. .env_dev
+python3 delete-alerts.py \
+  --grafana-url $GRAFANA_URL \
+  --grafana-token $GRAFANA_TOKEN \
+  --delete-alerts-file "alert_ids.json"
 
 
 # Wavefront Alert Details
