@@ -13,11 +13,12 @@ import argparse
 import logging
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path  # <-- added
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
+ALERT_IDS_FILE = "alert_ids.json"
 
 class DataSourceType(Enum):
     PROMETHEUS = "prometheus"
@@ -47,7 +48,7 @@ class WavefrontExtractor:
         self.url = url.rstrip('/')
         self.token = token
         self.headers = {'Authorization': f'Bearer {token}'}
-    
+
     def get_all_dashboards(self) -> List[Dict]:
         """Fetch all dashboards from Wavefront"""
         try:
@@ -78,7 +79,7 @@ class WavefrontExtractor:
             return None
     
     def get_alerts(self) -> List[Dict]:
-        """Fetch all alerts from Wavefront"""
+        logger.info("Fetch all alerts from Wavefront")
         try:
             response = requests.get(
                 f"{self.url}/api/v2/alert",
@@ -92,6 +93,21 @@ class WavefrontExtractor:
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to fetch alerts: {e}")
             return []
+
+    def get_alert(self, id: str) -> Dict:
+        logger.info(f"Fetch alert {id} from Wavefront")
+        try:
+            response = requests.get(
+                f"{self.url}/api/v2/alert/{id}",
+                headers=self.headers
+            )
+            response.raise_for_status()
+            return response.json().get('response', {})
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch alert {id}: {e}")
+            if hasattr(e.response, 'text'):
+                logger.error(f"Response: {e.response.text}")
+            return {}
 
 
 class QueryTranslator:
@@ -117,17 +133,22 @@ class QueryTranslator:
             # Parse tags
             tags = {}
             if tags_str:
-                tag_pattern = r'(\w+)="([^"]+)"'
-                tag_matches = re.findall(tag_pattern, tags_str)
-                tags = {k: v for k, v in tag_matches}
+                # tag_pattern = r'(\w+)="([^"]+)"'
+                # tag_matches = re.findall(tag_pattern, tags_str)
+                # tags = {k: v for k, v in tag_matches}
+                tags = tags_str
             
             # Build PromQL
+            # logger.info("tags: %s", tags)
             if tags:
-                tag_str = ', '.join([f'{k}="{v}"' for k, v in tags.items()])
+                # tag_str = ', '.join([f'{k}="{v}"' for k, v in tags.items()])
+                tag_str = tags_str
                 promql = f"{metric}{{{tag_str}}}"
             else:
                 promql = metric
-            
+
+            # logger.info("promql: %s", promql)
+
             # Handle complex WQL functions with proper nesting
             wql_lower = wql_query.lower()
             
@@ -457,268 +478,233 @@ class GrafanaDashboardBuilder:
 
 
 class GrafanaAlertBuilder:
+        
     """Build Grafana alerts from Wavefront alerts"""
     
     def __init__(self, datasource_type: DataSourceType, datasource_uid: str):
         self.datasource_type = datasource_type
         self.datasource_uid = datasource_uid
     
-    def build_alert(self, wf_alert: Dict, folder_uid: str, rule_group: str) -> Dict:
-        """Convert Wavefront alert to Grafana alert rule"""
-        
-        # Parse the Wavefront condition for queries and thresholds
-        condition = wf_alert.get('condition', '')
-        queries, threshold_info = self._parse_wavefront_condition(condition)
-        
-        # Determine reducer type based on WQL functions
-        reducer_type = self._determine_reducer_type(condition)
-        
-        # Build the data array with chained steps
-        data = []
-        
-        # Step A: Main query
-        if queries:
-            # Handle both simple string queries and dict queries
-            if isinstance(queries[0], dict):
-                primary_query = queries[0]['query']
-                threshold_info = {
-                    'operator': self._map_operator(queries[0]['operator']),
-                    'value': queries[0]['value']
-                }
-            else:
-                primary_query = queries[0]
-            
-            translated_query = QueryTranslator.translate(primary_query, self.datasource_type)
-            
-            data.append({
-                "refId": "A",
-                "relativeTimeRange": {
-                    "from": 600,
-                    "to": 0
+    def build_alert(self, wf_alert: Dict, folder_uid: str, rule_group: str) -> Optional[Dict]:
+        """
+        Convert a Wavefront alert into a single Grafana unified alert rule.
+
+        Requirements mapping:
+          - Skip building if wf_alert.status == "SNOOZED" (status may be a string or list).
+          - Each element in wf_alert['alertSources'] becomes one Grafana data[] element.
+              * Its refId is assigned sequentially starting with 'A'.
+              * If its query is a variable reference like ${VarName}, create an expression
+                step (datasource __expr__) whose expression is the refId of VarName.
+              * Otherwise create a datasource query step (Prometheus expr / Influx query).
+          - Each entry in wf_alert['conditions'] (warn, severe, etc.) becomes a Grafana
+            data[] element whose model.type == "threshold".
+              * Parse pattern: ${VarName} <op> <number>
+              * Link threshold step's expression to the referenced VarName refId.
+              * Evaluator operator maps to Grafana evaluator type (gt, ge, lt, le, eq, ne).
+          - Final rule.condition points to the "most severe" threshold refId:
+              * Prefer severe if present, else warn, else last threshold added.
+          - Multiple queries & thresholds supported; no additional reduce steps are
+            injected per the stated requirement (1:1 mapping).
+        """
+        # 1. Skip snoozed alerts
+        status_val = wf_alert.get('status')
+        if (isinstance(status_val, str) and status_val.upper() == "SNOOZED") or \
+           (isinstance(status_val, list) and any(s.upper() == "SNOOZED" for s in status_val)):
+            logger.info(f"Skipping snoozed alert: {wf_alert.get('uid', 'null')}: {wf_alert.get('name', 'Unnamed')}")
+            return None
+
+        alert_sources: List[Dict] = wf_alert.get('alertSources', [])
+        conditions_dict: Dict[str, str] = wf_alert.get('conditions', {}) or {}
+
+        if not alert_sources and not conditions_dict:
+            return None  # Nothing to build
+
+        # 2. Assign refIds sequentially for queries (alertSources)
+        #    Keep name -> refId map (variable & condition sources both have 'name')
+        name_ref_map: Dict[str, str] = {}
+        data: List[Dict] = []
+        next_ref_ord = ord('A')
+
+        def next_ref_id() -> str:
+            nonlocal next_ref_ord
+            ref_id = chr(next_ref_ord)
+            next_ref_ord += 1
+            return ref_id
+
+        # Build a preliminary name->query map for variable substitution
+        var_query_map: Dict[str, str] = {}
+        for src in alert_sources:
+            name = src.get('name')
+            query = src.get('query', '')
+            if name and query:
+                var_query_map[name] = query
+
+        # Helper: expand ${Var} inside query strings (single pass; nested uncommon)
+        import re
+        var_pattern = re.compile(r'\$\{([^}]+)\}')
+
+        def expand_variables(q: str) -> str:
+            def repl(m):
+                key = m.group(1)
+                return var_query_map.get(key, m.group(0))
+            return var_pattern.sub(repl, q)
+
+        # 3. Create data steps for each alertSource
+        for src in alert_sources:
+            name = src.get('name')
+            raw_query = src.get('query', '') or ''
+            ref_id = next_ref_id()
+            if name:
+                name_ref_map[name] = ref_id
+
+            # Variable reference pattern: entire query exactly "${VarName}"
+            m_var_only = re.fullmatch(r'\$\{([^}]+)\}', raw_query.strip())
+            if m_var_only:
+                referenced = m_var_only.group(1)
+                referenced_ref = name_ref_map.get(referenced)
+                # If referenced ref not yet defined, fall back to expression "0"
+                expression = referenced_ref if referenced_ref else "0"
+                data.append({
+                    "refId": ref_id,
+                    "relativeTimeRange": {"from": 600, "to": 0},
+                    "datasourceUid": "__expr__",
+                    "model": {
+                        "datasource": {"type": "__expr__", "uid": "__expr__"},
+                        "expression": f"${{{expression}}}",
+                        "type": "math",      # simple expression pass-through
+                        "refId": ref_id
+                    }
+                })
+                continue
+
+            # Otherwise treat as real source query
+            expanded_query = expand_variables(raw_query)
+            # logger.info("Expanded query: %s", expanded_query)
+
+            translated = QueryTranslator.translate(expanded_query, self.datasource_type)
+            # logger.info("Translated query: %s", translated)
+
+            model = {
+                "datasource": {
+                    "type": self.datasource_type.value,
+                    "uid": self.datasource_uid
                 },
+                "expr": translated if self.datasource_type == DataSourceType.PROMETHEUS else "",
+                "query": translated if self.datasource_type == DataSourceType.INFLUXDB else "",
+                "instant": True,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": ref_id
+            }
+            data.append({
+                "refId": ref_id,
+                "relativeTimeRange": {"from": 600, "to": 0},
                 "datasourceUid": self.datasource_uid,
-                "model": {
-                    "datasource": {
-                        "type": self.datasource_type.value,
-                        "uid": self.datasource_uid
-                    },
-                    "expr": translated_query if self.datasource_type == DataSourceType.PROMETHEUS else "",
-                    "query": translated_query if self.datasource_type == DataSourceType.INFLUXDB else "",
-                    "instant": True,
-                    "intervalMs": 1000,
-                    "maxDataPoints": 43200,
-                    "refId": "A"
-                }
+                "model": model
             })
-            
-            # Step B: Reduce expression (convert series to single value)
+
+        last_non_threshold_ref_id = ref_id
+
+        # 4. Threshold steps from conditions
+        # Maintain ordering but capture severe/warn refIds for final condition preference
+        threshold_ref_ids: Dict[str, str] = {}
+        operator_regex = re.compile(r'^\s*\$\{([^}]+)\}\s*([<>]=?|==|!=)\s*([-+]?\d+(?:\.\d+)?)\s*$')
+
+        for level, expr in conditions_dict.items():
+            ref_id = next_ref_id()
+            var_name = None
+            op = None
+            value = None
+
+            m = operator_regex.match(expr)
+            if m:
+                var_name, op, value = m.group(1), m.group(2), float(m.group(3))
+            else:
+                # Attempt partial parse (fallback)
+                m2 = re.search(r'\$\{([^}]+)\}', expr)
+                if m2:
+                    var_name = m2.group(1)
+                # operator/value fallback
+                m3 = re.search(r'([<>]=?|==|!=)\s*([-+]?\d+(?:\.\d+)?)', expr)
+                if m3:
+                    op = m3.group(1)
+                    value = float(m3.group(2))
+            if not op:
+                op = '>'  # default
+            if value is None:
+                value = 0.0
+
+            mapped_op = self._map_operator(op)
+            referenced_ref = name_ref_map.get(var_name) if var_name else None
+            if not referenced_ref and data:
+                # fallback to first query step
+                # referenced_ref = data[0]['refId']
+                # Use the last non-threshold ref_id
+                referenced_ref = last_non_threshold_ref_id if data else "A"
+
             data.append({
-                "refId": "B",
-                "relativeTimeRange": {
-                    "from": 600,
-                    "to": 0
-                },
+                "refId": ref_id,
+                "relativeTimeRange": {"from": 600, "to": 0},
                 "datasourceUid": "__expr__",
                 "model": {
-                    "conditions": [
-                        {
-                            "evaluator": {
-                                "params": [],
-                                "type": "gt"
-                            },
-                            "operator": {
-                                "type": "and"
-                            },
-                            "query": {
-                                "params": ["B"]
-                            },
-                            "reducer": {
-                                "params": [],
-                                "type": "last"
-                            },
-                            "type": "query"
-                        }
-                    ],
-                    "datasource": {
-                        "type": "__expr__",
-                        "uid": "__expr__"
-                    },
-                    "expression": "A",
-                    "intervalMs": 1000,
-                    "maxDataPoints": 43200,
-                    "reducer": reducer_type,
-                    "refId": "B",
-                    "type": "reduce"
+                    "conditions": [{
+                        "evaluator": {
+                            "params": [value],
+                            "type": mapped_op
+                        },
+                        "operator": {"type": "and"},
+                        "query": {"params": [ref_id]},
+                        "reducer": {"params": [], "type": "last"},
+                        "type": "query"
+                    }],
+                    "datasource": {"type": "__expr__", "uid": "__expr__"},
+                    "expression": referenced_ref or "0",
+                    "type": "threshold",
+                    "refId": ref_id
                 }
             })
-            
-            # Step C: Threshold evaluation
-            data.append({
-                "refId": "C",
-                "relativeTimeRange": {
-                    "from": 600,
-                    "to": 0
-                },
-                "datasourceUid": "__expr__",
-                "model": {
-                    "conditions": [
-                        {
-                            "evaluator": {
-                                "params": [threshold_info.get('value', 0)],
-                                "type": threshold_info.get('operator', 'gt')
-                            },
-                            "operator": {
-                                "type": "and"
-                            },
-                            "query": {
-                                "params": ["C"]
-                            },
-                            "reducer": {
-                                "params": [],
-                                "type": "last"
-                            },
-                            "type": "query"
-                        }
-                    ],
-                    "datasource": {
-                        "type": "__expr__",
-                        "uid": "__expr__"
-                    },
-                    "expression": "B",
-                    "intervalMs": 1000,
-                    "maxDataPoints": 43200,
-                    "refId": "C",
-                    "type": "threshold"
-                }
-            })
-            
-            # Handle additional queries for AND/OR conditions
-            if len(queries) > 1:
-                # Add support for multiple query conditions
-                current_ref = "C"
-                
-                for i, query_item in enumerate(queries[1:], start=1):
-                    prev_ref = current_ref
-                    query_ref = chr(68 + i * 3)  # D, G, J, etc.
-                    reduce_ref = chr(69 + i * 3)  # E, H, K, etc.
-                    threshold_ref = chr(70 + i * 3)  # F, I, L, etc.
-                    
-                    # Extract query and threshold from dict or string
-                    if isinstance(query_item, dict):
-                        query = query_item['query']
-                        query_threshold = {
-                            'operator': self._map_operator(query_item['operator']),
-                            'value': query_item['value']
-                        }
-                    else:
-                        query = query_item
-                        query_threshold = threshold_info
-                    
-                    # Add query step
-                    translated_query = QueryTranslator.translate(query, self.datasource_type)
-                    data.append({
-                        "refId": query_ref,
-                        "relativeTimeRange": {"from": 600, "to": 0},
-                        "datasourceUid": self.datasource_uid,
-                        "model": {
-                            "datasource": {
-                                "type": self.datasource_type.value,
-                                "uid": self.datasource_uid
-                            },
-                            "expr": translated_query if self.datasource_type == DataSourceType.PROMETHEUS else "",
-                            "query": translated_query if self.datasource_type == DataSourceType.INFLUXDB else "",
-                            "instant": True,
-                            "intervalMs": 1000,
-                            "maxDataPoints": 43200,
-                            "refId": query_ref
-                        }
-                    })
-                    
-                    # Add reduce step
-                    data.append({
-                        "refId": reduce_ref,
-                        "relativeTimeRange": {"from": 600, "to": 0},
-                        "datasourceUid": "__expr__",
-                        "model": {
-                            "datasource": {"type": "__expr__", "uid": "__expr__"},
-                            "expression": query_ref,
-                            "reducer": reducer_type,
-                            "type": "reduce",
-                            "refId": reduce_ref
-                        }
-                    })
-                    
-                    # Add threshold step
-                    data.append({
-                        "refId": threshold_ref,
-                        "relativeTimeRange": {"from": 600, "to": 0},
-                        "datasourceUid": "__expr__",
-                        "model": {
-                            "conditions": [{
-                                "evaluator": {
-                                    "params": [query_threshold.get('value', 0)],
-                                    "type": query_threshold.get('operator', 'gt')
-                                },
-                                "operator": {"type": "and"},
-                                "query": {"params": [threshold_ref]},
-                                "reducer": {"params": [], "type": "last"},
-                                "type": "query"
-                            }],
-                            "datasource": {"type": "__expr__", "uid": "__expr__"},
-                            "expression": reduce_ref,
-                            "type": "threshold",
-                            "refId": threshold_ref
-                        }
-                    })
-                    
-                    # Add math expression to combine conditions
-                    combine_ref = chr(71 + i * 3)  # G, J, M, etc.
-                    operator = self._extract_logical_operator(condition, i)
-                    math_expr = f"${prev_ref} {operator} ${threshold_ref}"
-                    
-                    data.append({
-                        "refId": combine_ref,
-                        "relativeTimeRange": {"from": 600, "to": 0},
-                        "datasourceUid": "__expr__",
-                        "model": {
-                            "datasource": {"type": "__expr__", "uid": "__expr__"},
-                            "expression": math_expr,
-                            "type": "math",
-                            "refId": combine_ref
-                        }
-                    })
-                    
-                    current_ref = combine_ref
-                
-                # Update final condition reference
-                alert_rule["condition"] = current_ref
-        
-        # Build alert rule with proper Grafana structure
+            threshold_ref_ids[level] = ref_id
+
+        # 5. Determine final condition refId
+        if threshold_ref_ids:
+            if 'severe' in threshold_ref_ids:
+                final_condition = threshold_ref_ids['severe']
+            elif 'warn' in threshold_ref_ids:
+                final_condition = threshold_ref_ids['warn']
+            else:
+                # any threshold
+                final_condition = list(threshold_ref_ids.values())[-1]
+        else:
+            # No thresholds; choose last query step
+            final_condition = data[-1]['refId'] if data else "A"
+
+        # 6. Assemble rule
         alert_rule = {
-            "uid": f"wf_{wf_alert.get('id', '')}"[:40],  # Grafana UID limit
+            "uid": f"wf_{wf_alert.get('id', '')}"[:40],
             "title": wf_alert.get('name', 'Migrated Alert'),
-            "condition": "C",  # Final step is the condition
+            "condition": final_condition,
             "data": data,
             "ruleGroup": rule_group,
             "folderUID": folder_uid,
             "orgID": 1,
             "noDataState": "NoData",
-            "execErrState": "Error",  # Changed from "Alerting" to "Error"
+            "execErrState": "Error",
             "for": self._convert_duration(wf_alert.get('minutes', 5)),
             "annotations": {
                 "description": wf_alert.get('additionalInformation', ''),
-                "runbook_url": "",
-                "summary": wf_alert.get('name', '')
+                "summary": wf_alert.get('name', ''),
+                "wavefront_original_conditions": json.dumps(conditions_dict)
             },
-            "labels": {},
+            "labels": {
+                "wavefront_severity": wf_alert.get('severity', 'UNKNOWN')
+            },
             "isPaused": False
         }
-       
-        # Add tags as labels
-        if 'tags' in wf_alert:
-            for tag in wf_alert.get('tags', []):
-                alert_rule['labels'][f'tag_{tag}'] = tag
-        
+
+        # Add tags
+        for tag in wf_alert.get('tags', {}).get('customerTags', []):
+            alert_rule['labels'][f"tag_{tag}"] = tag
+
         return alert_rule
     
     def _parse_wavefront_condition(self, condition: str) -> tuple:
@@ -731,6 +717,7 @@ class GrafanaAlertBuilder:
         # Handle complex conditions with AND/OR
         # Split by AND/OR while preserving the operators
         parts = re.split(r'\s+(AND|OR)\s+', condition, flags=re.IGNORECASE)
+        # logger.info("parts: %s", parts)
         
         for part in parts:
             if part.upper() in ['AND', 'OR']:
@@ -739,7 +726,7 @@ class GrafanaAlertBuilder:
             # Extract ts() queries from this part
             ts_pattern = r'ts\([^)]+\)'
             ts_matches = re.findall(ts_pattern, part)
-            
+
             if ts_matches:
                 # Each ts() with its condition is a separate query
                 for ts_match in ts_matches:
@@ -769,7 +756,7 @@ class GrafanaAlertBuilder:
                 # Simple case with one threshold for all
                 threshold_pattern = r'([<>]=?|=)\s*([\d.]+)'
                 threshold_match = re.search(threshold_pattern, condition)
-                
+
                 if threshold_match:
                     operator_map = {
                         '>': 'gt',
@@ -787,7 +774,32 @@ class GrafanaAlertBuilder:
                     }
                 
                 queries = ts_matches
+
             elif condition.strip():
+                # Simple case with one threshold for all
+                threshold_pattern = r'([<>]=?|=)\s*([\d.]+)'
+                threshold_match = re.search(threshold_pattern, condition)
+
+                if threshold_match:
+                    operator_map = {
+                        '>': 'gt',
+                        '>=': 'gte',
+                        '<': 'lt',
+                        '<=': 'lte',
+                        '=': 'eq'
+                    }
+                    operator = threshold_match.group(1)
+                    value = float(threshold_match.group(2))
+                    
+                    threshold_info = {
+                        'operator': operator_map.get(operator, 'gt'),
+                        'value': value
+                    }
+
+                # Strip out operators and everything after it to give a clean query
+                condition = condition.split('>')[0]
+                condition = condition.split('<')[0]
+                condition = condition.split('=')[0]
                 queries = [condition.strip()]
         
         return queries, threshold_info
@@ -878,12 +890,14 @@ class GrafanaImporter:
             # Token-based authentication
             self.headers = {
                 'Authorization': f'Bearer {token}',
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-Disable-Provenance': 'true'
             }
         elif username and password:
             # Basic authentication
             self.headers = {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-Disable-Provenance': 'true'
             }
             self.auth = (username, password)
         else:
@@ -913,9 +927,10 @@ class GrafanaImporter:
         """Import a single alert rule to Grafana"""
         try:
             # Display the alert before posting
-            logger.info("Alert to be posted:")
-            logger.info(json.dumps(alert_rule, indent=2))
-            
+            # logger.info(f"self.headers: {json.dumps(self.headers, indent=2)}")
+            # logger.info("Alert to be posted:")
+            # logger.info(json.dumps(alert_rule, indent=2))
+
             # Import the alert rule
             response = requests.post(
                 f"{self.url}/api/v1/provisioning/alert-rules",
@@ -971,73 +986,14 @@ class GrafanaImporter:
             if hasattr(e.response, 'text'):
                 logger.error(f"Response: {e.response.text}")
             return None
-    
-    def get_alert_rules(self) -> List[Dict]:
-        """Get all alert rules from Grafana"""
-        try:
-            response = requests.get(
-                f"{self.url}/api/v1/provisioning/alert-rules",
-                headers=self.headers,
-                auth=self.auth
-            )
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to get alert rules: {e}")
-            if hasattr(e.response, 'text'):
-                logger.error(f"Response: {e.response.text}")
-            return []
-    
-    def delete_alert_rule(self, uid: str) -> bool:
-        """Delete a specific alert rule by UID"""
-        try:
-            response = requests.delete(
-                f"{self.url}/api/v1/provisioning/alert-rules/{uid}",
-                headers=self.headers,
-                auth=self.auth
-            )
-            response.raise_for_status()
-            logger.info(f"Successfully deleted alert rule: {uid}")
-            return True
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to delete alert rule {uid}: {e}")
-            if hasattr(e.response, 'text'):
-                logger.error(f"Response: {e.response.text}")
-            return False
-    
-    def delete_alerts_by_folder(self, folder_name: str) -> int:
-        """Delete all alert rules in a specific folder"""
-        alert_rules = self.get_alert_rules()
-        deleted_count = 0
-        
-        for rule in alert_rules:
-            if rule.get('folderTitle') == folder_name:
-                if self.delete_alert_rule(rule['uid']):
-                    deleted_count += 1
-        
-        logger.info(f"Deleted {deleted_count} alerts from folder '{folder_name}'")
-        return deleted_count
-    
-    def delete_alerts_by_pattern(self, pattern: str) -> int:
-        """Delete alert rules matching a name pattern"""
-        import re
-        alert_rules = self.get_alert_rules()
-        deleted_count = 0
-        
-        for rule in alert_rules:
-            if re.search(pattern, rule.get('title', ''), re.IGNORECASE):
-                if self.delete_alert_rule(rule['uid']):
-                    deleted_count += 1
-        
-        logger.info(f"Deleted {deleted_count} alerts matching pattern '{pattern}'")
-        return deleted_count
 
 
 class MigrationOrchestrator:
     """Orchestrate the complete migration process"""
     
-    def __init__(self, config: MigrationConfig):
+    def __init__(self, config: MigrationConfig, alert_ids_file: str = ALERT_IDS_FILE):
         self.config = config
+        self.alert_ids_file = alert_ids_file
         self.extractor = WavefrontExtractor(config.wavefront_url, config.wavefront_token)
         self.dashboard_builder = GrafanaDashboardBuilder(
             config.target_datasource, 
@@ -1110,10 +1066,18 @@ class MigrationOrchestrator:
         """Migrate alerts from Wavefront to Grafana"""
         
         # Get alerts to migrate
-        alerts = self.extractor.get_alerts()
         if alert_ids:
-            alerts = [a for a in alerts if a['id'] in alert_ids]
-        
+            alerts = []
+            # Fetch each alert by ID
+            logger.info(f"Fetching specific alerts from Wavefront")
+            for alert_id in alert_ids:
+                alert = self.extractor.get_alert(alert_id)
+                if alert:
+                    alerts.append(alert)
+            # alerts = [a for a in alerts if a['id'] in alert_ids]
+        else:
+            alerts = self.extractor.get_alerts()
+
         logger.info(f"Migrating {len(alerts)} alerts...")
         
         if not alerts:
@@ -1142,7 +1106,11 @@ class MigrationOrchestrator:
                     folder_uid=folder_uid,
                     rule_group=group_name
                 )
-                
+
+                # Skip alert if not valid
+                if not grafana_alert:
+                    continue
+
                 # Save individual alert file for review
                 filename = f"alert_{grafana_alert.get('uid', 'unknown')}.json"
                 with open(filename, 'w') as f:
@@ -1152,6 +1120,9 @@ class MigrationOrchestrator:
                 # Import the alert to Grafana
                 if self.importer.import_alert_rule(grafana_alert):
                     success_count += 1
+                    # Record the successfully created alert UID
+                    if grafana_alert.get("uid"):
+                        self._append_alert_uid(grafana_alert["uid"])  # <-- added
                 else:
                     failed_alerts.append(wf_alert.get('name', 'Unknown'))
                 
@@ -1163,32 +1134,26 @@ class MigrationOrchestrator:
         if failed_alerts:
             logger.warning(f"Failed alerts: {', '.join(failed_alerts)}")
     
-    def delete_alerts(self, delete_by: str, value: str) -> int:
-        """Delete alerts from Grafana based on criteria"""
-        if delete_by == 'folder':
-            return self.importer.delete_alerts_by_folder(value)
-        elif delete_by == 'pattern':
-            return self.importer.delete_alerts_by_pattern(value)
-        elif delete_by == 'uid':
-            # Delete specific alert by UID
-            if self.importer.delete_alert_rule(value):
-                return 1
-            return 0
-        else:
-            logger.error(f"Unknown delete criteria: {delete_by}")
-            return 0
+    def _append_alert_uid(self, uid: str):  # <-- added helper
+        """Append a created Grafana alert UID to the tracking JSON file."""
+        try:
+            path = Path(self.alert_ids_file)
+            if not path.exists():
+                path.write_text("[]")
+            try:
+                data = json.loads(path.read_text() or "[]")
+                if not isinstance(data, list):
+                    data = []
+            except Exception:
+                data = []
+            data.append(uid)
+            path.write_text(json.dumps(data, indent=2))
+        except Exception as e:
+            logger.warning(f"Failed to record alert UID {uid} to {self.alert_ids_file}: {e}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Migrate Wavefront dashboards and alerts to Grafana, or manage Grafana alerts')
-    
-    # Alert deletion options (at the top to check early)
-    parser.add_argument('--delete-alerts', action='store_true', 
-                       help='Delete alerts from Grafana instead of migrating')
-    parser.add_argument('--delete-by', choices=['folder', 'pattern', 'uid'],
-                       help='Delete criteria: folder name, title pattern, or specific UID')
-    parser.add_argument('--delete-value', 
-                       help='Value for delete criteria (folder name, regex pattern, or UID)')
+    parser = argparse.ArgumentParser(description='Migrate Wavefront dashboards and alerts to Grafana')
     
     parser.add_argument('--grafana-url', required=True, help='Grafana API URL')
     # Grafana authentication - either token OR username/password
@@ -1218,7 +1183,7 @@ def main():
                        help='Evaluation interval for alerts (default: 60s)')
     
     args = parser.parse_args()
-    
+
     # Parse Grafana authentication
     grafana_token = None
     grafana_username = None
@@ -1229,38 +1194,13 @@ def main():
     elif args.grafana_credentials:
         grafana_username, grafana_password = args.grafana_credentials
     
-    # Handle alert deletion mode
-    if args.delete_alerts:
-        if not args.delete_by or not args.delete_value:
-            parser.error("--delete-alerts requires both --delete-by and --delete-value")
-        
-        # Create importer for deletion (doesn't need full orchestrator)
-        importer = GrafanaImporter(
-            args.grafana_url,
-            token=grafana_token,
-            username=grafana_username,
-            password=grafana_password
-        )
-        
-        # Perform deletion
-        if args.delete_by == 'folder':
-            deleted = importer.delete_alerts_by_folder(args.delete_value)
-            logger.info(f"Deleted {deleted} alerts from folder '{args.delete_value}'")
-        elif args.delete_by == 'pattern':
-            deleted = importer.delete_alerts_by_pattern(args.delete_value)
-            logger.info(f"Deleted {deleted} alerts matching pattern '{args.delete_value}'")
-        elif args.delete_by == 'uid':
-            success = importer.delete_alert_rule(args.delete_value)
-            logger.info(f"Alert deletion {'successful' if success else 'failed'} for UID: {args.delete_value}")
-        
-        return
-    
-    # For migration mode, validate required arguments
     if not args.wavefront_url or not args.wavefront_token:
         parser.error("Migration requires --wavefront-url and --wavefront-token")
     if not args.datasource_type or not args.datasource_uid:
         parser.error("Migration requires --datasource-type and --datasource-uid")
     
+    logger.info("Migration Process Started")
+
     # Create configuration for migration
     config = MigrationConfig(
         wavefront_url=args.wavefront_url,
@@ -1273,8 +1213,18 @@ def main():
         grafana_password=grafana_password
     )
     
+    if not args.skip_alerts:
+        try:
+            path = Path(ALERT_IDS_FILE)
+            if path.exists():
+                path.unlink()
+            path.write_text("[]")
+            logger.info(f"Initialized alert ID tracking file: {ALERT_IDS_FILE}")
+        except Exception as e:
+            logger.warning(f"Could not initialize {ALERT_IDS_FILE}: {e}")
+    
     # Run migration
-    orchestrator = MigrationOrchestrator(config)
+    orchestrator = MigrationOrchestrator(config, alert_ids_file=ALERT_IDS_FILE)  # <-- pass file
     
     if not args.skip_dashboards:
         orchestrator.migrate_dashboards(args.dashboards)
@@ -1287,7 +1237,7 @@ def main():
             evaluation_interval=args.alert_interval
         )
     
-    logger.info("Migration process completed!")
+    logger.info("Migration Process Completed!")
 
 
 if __name__ == "__main__":

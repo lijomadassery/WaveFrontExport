@@ -68,6 +68,17 @@ python3 wavefront-grafana-migrator.py \
   --dashboards "Kubernetes-Resources" \
   --skip-alerts
 
+### Migrate ALL alerts from Wavefront to Grafana ###
+. .env_dev
+python3 wavefront-grafana-migrator.py \
+  --wavefront-url $WAVEFRONT_URL \
+  --wavefront-token $WAVEFRONT_TOKEN \
+  --grafana-url $GRAFANA_URL \
+  --grafana-token $GRAFANA_TOKEN \
+  --datasource-type prometheus \
+  --datasource-uid $DATASOURCE_UID \
+  --skip-dashboards
+
 # Migrate specific alert from Wavefront to Grafana
 . .env_dev
 python3 wavefront-grafana-migrator.py \
@@ -77,21 +88,36 @@ python3 wavefront-grafana-migrator.py \
   --grafana-token $GRAFANA_TOKEN \
   --datasource-type prometheus \
   --datasource-uid $DATASOURCE_UID \
-  --alerts "1724941576183" \
+  --alerts "1724941576183" "1734108148091" \
   --skip-dashboards
 
 # Delete specific alert in Grafana
 . .env_dev
-python3 delete-bad-alert.py \
-  --wavefront-url $WAVEFRONT_URL \
-  --wavefront-token $WAVEFRONT_TOKEN \
+python3 delete-alerts.py \
   --grafana-url $GRAFANA_URL \
   --grafana-token $GRAFANA_TOKEN \
-  --datasource-type prometheus \
-  --datasource-uid $DATASOURCE_UID \
-  --delete-alerts "e7137e36-af19-4ae6-9b0f-8989121ed52b" \
-  --skip-dashboards
+  --delete-alerts "wf_1724941576183"
 
+# Delete all alerts in json file from Grafana
+. .env_dev
+python3 delete-alerts.py \
+  --grafana-url $GRAFANA_URL \
+  --grafana-token $GRAFANA_TOKEN \
+  --delete-alerts-file "alert_ids.json"
+
+
+# Wavefront Alert Details
+# 1
+"id": "1724941576183",
+"name": "App Health Check Error",
+# 2 
+"id": "1718653973273",
+"name": "Platform Services Failure Alert (CDCR Services - app-prod)",
 
 http://10.124.130.6/alerting/grafana/e6bc4cc9-4538-499a-97c8-5a49efe6b782/view
+"App Health Check Error"
 http://10.124.130.6/alerting/grafana/e7137e36-af19-4ae6-9b0f-8989121ed52b/view
+"Platform Services Failure Alert (CDCR Services - app-prod)"
+
+{'id': 4, 'uid': 'e6bc4cc9-4538-499a-97c8-5a49efe6b782', 'orgID': 1, 'folderUID': '', 'ruleGroup': '', 'title': 'App Health Check Error', 'condition': 'C', 'data': [{'refId': 'A', 'queryType': '', 'relativeTimeRange': {'from': 600, 'to': 0}, 'datasourceUid': 'ee891a1c-05c5-4c49-b782-1da4f43e5539', 'model': {'datasource': {'type': 'prometheus', 'uid': 'ee891a1c-05c5-4c49-b782-1da4f43e5539'}, 'expr': 'cdcr_apps_health{error="true"}', 'instant': True, 'intervalMs': 1000, 'maxDataPoints': 43200, 'query': '', 'refId': 'A'}}, {'refId': 'B', 'queryType': '', 'relativeTimeRange': {'from': 600, 'to': 0}, 'datasourceUid': '__expr__', 'model': {'conditions': [{'evaluator': {'params': [], 'type': 'gt'}, 'operator': {'type': 'and'}, 'query': {'params': ['B']}, 'reducer': {'params': [], 'type': 'last'}, 'type': 'query'}], 'datasource': {'type': '__expr__', 'uid': '__expr__'}, 'expression': 'A', 'intervalMs': 1000, 'maxDataPoints': 43200, 'reducer': 'count', 'refId': 'B', 'type': 'reduce'}}, {'refId': 'C', 'queryType': '', 'relativeTimeRange': {'from': 600, 'to': 0}, 'datasourceUid': '__expr__', 'model': {'conditions': [{'evaluator': {'params': [0], 'type': 'gt'}, 'operator': {'type': 'and'}, 'query': {'params': ['C']}, 'reducer': {'params': [], 'type': 'last'}, 'type': 'query'}], 'datasource': {'type': '__expr__', 'uid': '__expr__'}, 'expression': 'B', 'intervalMs': 1000, 'maxDataPoints': 43200, 'refId': 'C', 'type': 'threshold'}}], 'updated': '2025-08-06T20:44:49Z', 'noDataState': 'NoData', 'execErrState': 'Alerting', 'for': '5m', 'annotations': {'description': '', 'runbook_url': '', 'summary': 'App Health Check Error'}, 'labels': {'tag_customerTags': 'customerTags'}, 'provenance': 'api', 'isPaused': False}
+{'id': 3, 'uid': 'e7137e36-af19-4ae6-9b0f-8989121ed52b', 'orgID': 1, 'folderUID': '', 'ruleGroup': '', 'title': 'Platform Services Failure Alert (CDCR Services - app-prod)', 'condition': 'A', 'data': [{'refId': 'A', 'queryType': '', 'relativeTimeRange': {'from': 600, 'to': 0}, 'datasourceUid': 'ee891a1c-05c5-4c49-b782-1da4f43e5539', 'model': {'datasource': {'type': 'prometheus', 'uid': 'ee891a1c-05c5-4c49-b782-1da4f43e5539'}, 'expr': 'tap-metrics_carvel_app_gauge{cluster="app-prod", name="cdcr*"}', 'intervalMs': 1000, 'maxDataPoints': 43200, 'query': '', 'refId': 'A'}}], 'updated': '2025-08-06T01:42:20Z', 'noDataState': 'NoData', 'execErrState': 'Alerting', 'for': '5m', 'annotations': {'description': '', 'runbook_url': '', 'summary': 'Platform Services Failure Alert (CDCR Services - app-prod)'}, 'labels': {'tag_customerTags': 'customerTags'}, 'provenance': 'api', 'isPaused': False}
